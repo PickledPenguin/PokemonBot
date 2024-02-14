@@ -4,11 +4,10 @@ const fs = require('fs')
 var cron = require('node-cron')
 require("dotenv").config()
 
-const { Configuration, OpenAIApi } = require("openai");
-const configuration = new Configuration({
+const { OpenAIApi } = require("openai");
+const openai = new OpenAIApi({
     apiKey: process.env.OPEN_AI_TOKEN,
 });
-const openai = new OpenAIApi(configuration);
 
 var saveData;
 var uncommonRole;
