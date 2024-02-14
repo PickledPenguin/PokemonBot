@@ -46,11 +46,14 @@ client.on('ready', () => {
 cron.schedule('50 21 * * *', increaseRarity, {timezone: "America/New_York"});
 
 async function askAI(prompt, author_id){
+    console.log("prompt:\n" + prompt)
+    console.log(author_id)
     const response = await openai.chat.completions.create({
-        messages: [{role: "system", content: "You are an announcer in an online Pokemon-like game where several users attempt to \"catch\" various Pokemon and obtain points based on the rarity value of the Pokemon they catch, as well as add those Pokemon to their \"Pokedex\". Your personality and tone for all following prompt answers should be: " + saveData[author_id]["AIPersonality"]}, { role: "user", content: prompt }],
+        messages: [{role: "system", content: "You are an announcer in an online Pokemon-like game where several users attempt to \"catch\" various Pokemon and obtain points based on the rarity value of the Pokemon they catch, as well as add those Pokemon to their \"Pokedex\". Keep all following answers to a few sentences. Here is how you should answer all future prompts: " + saveData[author_id]["AIPersonality"]}, { role: "user", content: prompt }],
         model: "gpt-3.5-turbo",
       });
-    return response.choices[0];
+    console.log(response.choices[0].message.content);
+    return response.choices[0].message.content;
 }
 
 function increaseRarity(){
