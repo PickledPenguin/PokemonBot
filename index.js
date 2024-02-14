@@ -4,6 +4,12 @@ const fs = require('fs')
 var cron = require('node-cron')
 require("dotenv").config()
 
+const { Configuration, OpenAIApi } = require("openai");
+const configuration = new Configuration({
+    apiKey: process.env.OPEN_AI_TOKEN,
+});
+const openai = new OpenAIApi(configuration);
+
 var saveData;
 var uncommonRole;
 var rareRole;
@@ -39,6 +45,14 @@ client.on('ready', () => {
 
 // starts the regular updates to pokemon rarity
 cron.schedule('50 21 * * *', increaseRarity, {timezone: "America/New_York"});
+
+async function askAI(prompt, author_id){
+    const response = await openai.chat.completions.create({
+        messages: [{role: "system", content: "You are an announcer in an online Pokemon-like game where several users attempt to \"catch\" various Pokemon and obtain points based on the rarity value of the Pokemon they catch, as well as add those Pokemon to their \"Pokedex\". Your personality and tone for all following prompt answers should be: " + saveData[author_id]["AIPersonality"]}, { role: "user", content: prompt }],
+        model: "gpt-3.5-turbo",
+      });
+    return response.choices[0];
+}
 
 function increaseRarity(){
     load(saveData);
@@ -98,7 +112,7 @@ function splitMessage(str, size) {
 
 function setupDefaultsIfNecessary(user){
   if (saveData[user.id] === undefined) {
-    saveData[user.id] = {"points": 0,"username":user.username,"pokedex":{},"wants-to-play":true,"rarityValue":0};
+    saveData[user.id] = {"points": 0,"username":user.username,"pokedex":{},"wants-to-play":true,"rarityValue":0,"AIPersonality":"Pokemon Announcer"};
   }
   save();
 }
@@ -136,10 +150,6 @@ function save(){
 
 client.on('messageCreate', msg => {
 
-  if (msg.content.startsWith('!')){
-    load(saveData);
-  }
-
   // ignore self messages and other bot messages
   if (msg.author === client.user || msg.author.bot) {
     return;
@@ -150,8 +160,17 @@ client.on('messageCreate', msg => {
     return;
   }
 
+  if (msg.content.startsWith('!')){
+    load(saveData);
+  }
+
   else if (msg.content.toLowerCase().includes('!help-pokemon')){
-    msg.channel.send("Here are the current commands:\n\n**!help-pokemon**   (displays commands)\n**!register**   (Creates a new game record for you if you don\'t have one already)\n**!catch [@people]**   (catches everyone mentioned)\n**!uncatch [@people]**   (reverts catches on everyone mentioned)\n**!status [@person]**   (gives point and pokedex status for the person mentioned)\n**!overall**   (Gives a summary of person with most points and person with least)\n**!list-data**   (Lists everyone's points and pokedex progress)\n**!opt-out**   (Opts you out for playing the game. Any game messages that mention you will be deleted)\n**!opt-in**   (Opts you back in for playing the game)\n**!off-limits**   (Displays everyone who has opted out of playing the game)\n\n*The following commands are only availible to people with the \"PokemonBotManager\" tag:*\n\n**!clear-all-data**   (Erases all data. THIS CANNOT BE UNDONE!)\n**!increment-points [@person]**   (adds 1 point to the person mentioned)\n**!decrement-points [@person]**   (takes 1 point from the person mentioned)\n**!increment-rarity [@person]**   (increases the rarity value of the person mentioned by 1)\n**!decrement-rarity [@person]**   (decreases the rarity value of the person mentioned by 1)\n**!next-season**   (advances the game onto the next season. The seasons run in this order: FALL, WINTER, SPRING, SUMMER)")
+    msg.channel.send("Here are the current commands:\n\n**!help-pokemon**   (displays commands)\n**!register**   (Creates a new game record for you if you don\'t have one already)\n**!catch [@people]**   (catches everyone mentioned)\n**!uncatch [@people]**   (reverts catches on everyone mentioned)\n**!status [@person]**   (gives point and pokedex status for the person mentioned)\n**!leaderboard**   (Gives the top 10 players with the most points)\n**!list-data**   (Lists everyone's points and pokedex progress)\n**!opt-out**   (Opts you out for playing the game. Any game messages that mention you will be deleted)\n**!opt-in**   (Opts you back in for playing the game)\n**!off-limits**   (Displays everyone who has opted out of playing the game)\n\n*The following commands are only availible to people with the \"PokemonBotManager\" tag:*\n\n**!clear-all-data**   (Erases all data. THIS CANNOT BE UNDONE!)\n**!increment-points [@person]**   (adds 1 point to the person mentioned)\n**!decrement-points [@person]**   (takes 1 point from the person mentioned)\n**!increment-rarity [@person]**   (increases the rarity value of the person mentioned by 1)\n**!decrement-rarity [@person]**   (decreases the rarity value of the person mentioned by 1)\n**!next-season**   (advances the game onto the next season. The seasons run in this order: FALL, WINTER, SPRING, SUMMER)")
+  }
+
+  else if (msg.content.toLowerCase().startsWith('!set-personality')){
+    personality = msg.content.split('!set-personality', 1)[1]
+    saveData[msg.author.id]["AIPersonality"] = personality;
   }
 
     
@@ -232,13 +251,13 @@ client.on('messageCreate', msg => {
       let caughtPerson = CaughtPerson[1];
 
       if (msg.author.id === caughtPerson.id) {
-        msg.channel.send("You can\'t catch yourself LOL :joy:");
+        msg.channel.send(askAI("A user has tried to \"catch\" themselves. Ridicule them for attempting such a rediculous thing", msg.author.id));
       }
       else if (caughtPerson.id === process.env.PLOT_ARMOR_PERSON){
-        msg.channel.send("Catch blocked by PLOT ARMOR ")
+        msg.channel.send(askAI("A user has tried to \"catch\" another user, but was unsuccessful because of the other user's special PLOT ARMOR feature.", msg.author.id))
       }
       else if (caughtPerson.id === process.env.BOT){
-        msg.channel.send("Bro tried to catch me :skull: :skull: :skull:");
+        msg.channel.send(askAI("A user has tried to \"catch\" YOU and was obviously unsuccessul! Ridicule them for attempting such a rediculous thing", msg.author.id));
       }
         
       else {
@@ -250,23 +269,23 @@ client.on('messageCreate', msg => {
             
             if (!person.roles){
                 saveData[msg.author.id]["points"] += 1;
-       			msg.channel.send("@" + msg.author.username + "has caught the NORMAL Pokemon " + "@" + caughtPerson.username + " and has recieved 1 point")
+                msg.channel.send(askAI("User @" + msg.author.username + " has caught the NORMAL-rarity Pokemon " + "@" + caughtPerson.username + " and has recieved 1 point. Describe the catch!", msg.author.id));
             }
             else if (person.roles.cache.some(role => role.id === process.env.UNCOMMON_ROLE)){
                 saveData[msg.author.id]["points"] += 3;
-                msg.channel.send("@" + msg.author.username + "has caught the :thumbsup: UNCOMMON :thumbsup: Pokemon " + "@" + caughtPerson.username + " and has received 3 points")
+                msg.channel.send(askAI("User @" + msg.author.username + " has caught the UNCOMMON-rarity Pokemon " + "@" + caughtPerson.username + " and has received 3 points. Describe the catch!", msg.author.id));
             }
             else if (person.roles.cache.some(role => role.id === process.env.RARE_ROLE)){
                 saveData[msg.author.id]["points"] += 5;
-                msg.channel.send("@" + msg.author.username + "has caught the :exclamation: RARE :exclamation: Pokemon " + "@" + caughtPerson.username + " and has recieved 5 points!")
+                msg.channel.send(askAI("User @" + msg.author.username + " has caught the RARE-rarity Pokemon " + "@" + caughtPerson.username + " and has recieved 5 points! Describe the catch!"), msg.author.id)
             }
             else if (person.roles.cache.some(role => role.id === process.env.SHINY_ROLE)){
                 saveData[msg.author.id]["points"] += 10;
-                msg.channel.send("@" + msg.author.username + " HAS CAUGHT THE :sparkles: SHINY :sparkles: POKEMON " + "@" + caughtPerson.username + " AND HAS RECIEVED 10 POINTS!")
+                msg.channel.send("User @" + msg.author.username + " HAS CAUGHT THE SHINY-rarity POKEMON " + "@" + caughtPerson.username + " AND HAS RECIEVED 10 POINTS! Describe the catch!")
             }
             else{
                 saveData[msg.author.id]["points"] += 1;
-                msg.channel.send("@" + msg.author.username + "has caught the NORMAL Pokemon " + "@" + caughtPerson.username + " and has recieved 1 point")
+                msg.channel.send(askAI("User @" + msg.author.username + " has caught the NORMAL-rarity Pokemon " + "@" + caughtPerson.username + " and has recieved 1 point. Describe the catch!", msg.author.id));
             }
             
             saveData[msg.author.id]["pokedex"][caughtPerson.id + saveData["SEASON_ID"]] = saveData["SEASON_EMOJI"] + " " + caughtPerson.username + " " + saveData["SEASON_EMOJI"];
@@ -306,25 +325,22 @@ client.on('messageCreate', msg => {
             
             if (!person.roles){
                 saveData[msg.author.id]["points"] -= 1;
-       			msg.channel.send("@" + msg.author.username + "has uncaught the NORMAL Pokemon " + "@" + uncatchPerson.username + " and has lost 1 point")
             }
             else if (person.roles.cache.some(role => role.id === process.env.UNCOMMON_ROLE)){
                 saveData[msg.author.id]["points"] -= 3;
-                msg.channel.send("@" + msg.author.username + "has uncaught the :thumbsup:UNCOMMON:thumbsup: Pokemon " + "@" + uncatchPerson.username + " and has lost 3 points")
             }
             else if (person.roles.cache.some(role => role.id === process.env.RARE_ROLE)){
                 saveData[msg.author.id]["points"] -= 5;
-                msg.channel.send("@" + msg.author.username + "has uncaught the :exclamation:RARE:exclamation: Pokemon " + "@" + uncatchPerson.username + " and has lost 5 points!")
             }
             else if (person.roles.cache.some(role => role.id === process.env.SHINY_ROLE)){
                 saveData[msg.author.id]["points"] -= 10;
-                msg.channel.send("@" + msg.author.username + " has uncaught the :sparkles:SHINY:sparkles: Pokemon " + "@" + uncatchPerson.username + " and has lost 10 points!")
             }
             else{
                 saveData[msg.author.id]["points"] -= 1;
-                msg.channel.send("@" + msg.author.username + "has uncaught the NORMAL Pokemon " + "@" + uncatchPerson.username + " and has lost 1 point")
             }
-              
+            
+            msg.channel.send("@" + msg.author.username + "has uncaught " + "@" + uncatchPerson.username)
+            
             saveData[msg.author.id]["pokedex"][uncatchPerson.id + saveData["SEASON_ID"]] = saveData["SEASON_EMOJI"] + " " + uncatchPerson.username + " " + saveData["SEASON_EMOJI"];
             saveData[uncatchPerson.id]["points"] += 1;
             save();
@@ -345,47 +361,17 @@ client.on('messageCreate', msg => {
   }
 
 
-  else if (msg.content.toLowerCase().includes("!overall")) {
+  else if (msg.content.toLowerCase().includes("!leaderboard")) {
     
     load(saveData);
+    let topUsersByPoints = Object.values(saveData)
+    .filter(user => user["wants-to-play"])
+    .sort((a, b) => b["points"] - a["points"])
+    .slice(0, 10);
 
-    // find the greatest
-    let max = Number.MIN_VALUE;
-    let maxPokedex = -1;
-    let maxPerson;
-    let maxPokedexPerson;
-    for (let key of Object.keys(saveData)) {
-      if (saveData[key]["wants-to-play"]){
-        if (saveData[key]["points"] > max) {
-          maxPerson = saveData[key]["username"];
-          max = saveData[key]["points"];
-        }
-        if (Object.keys(saveData[key]["pokedex"]).length > maxPokedex){
-          maxPokedexPerson = saveData[key]["username"];
-          maxPokedex = Object.keys(saveData[key]["pokedex"]).length;
-        }
-      }
-    }
-
-    // find the least
-    let min = Number.MAX_VALUE;
-    let minPokedex = Number.MAX_VALUE;
-    let minPerson;
-    let minPokedexPerson;
-    for (let key of Object.keys(saveData)) {
-      if (saveData[key]["wants-to-play"]){
-        if (saveData[key]["points"] < min) {
-          minPerson = saveData[key]["username"];
-          min = saveData[key]["points"];
-        }
-        if (Object.keys(saveData[key]["pokedex"]).length < minPokedex){
-          minPokedexPerson = saveData[key]["username"];
-          minPokedex = Object.keys(saveData[key]["pokedex"]).length;
-        }
-      }
-    }
-
-    msg.channel.send("Most points:\n\t**@" + maxPerson + "** (" + max + " points)\n\nLeast points:\n\t**@" + minPerson + "** (" + min + " points)\n\nMost complete Pokedex:\n\t**@" + maxPokedexPerson + "** (" + maxPokedex + ")\n\nLeast points:\n\t**@" + minPokedexPerson + "** (" + minPokedex + ")\n");
+    msg.channel.send("Top 10 users with the most points:\n", topUsersByPoints.map((user, index) =>
+    `${index + 1}. Username: ${user["username"]}, Points: ${user["points"]}`
+  ).join('\n'));
 
   }
 
