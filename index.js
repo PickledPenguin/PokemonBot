@@ -4,8 +4,8 @@ const fs = require('fs')
 var cron = require('node-cron')
 require("dotenv").config()
 
-const { OpenAIApi } = require("openai");
-const openai = new OpenAIApi({
+const { OpenAI } = require("openai");
+const openai = new OpenAI({
     apiKey: process.env.OPEN_AI_TOKEN,
 });
 
@@ -17,7 +17,7 @@ var shinyRole;
 try {
   saveData = JSON.parse(fs.readFileSync('./save-data.json', 'utf8')); // Load save data
 } catch (e) {
-  console.log("Error with loading saveData")
+  console.log("Error with loading saveData:\n" + e)
 }
 
 app.get('/', (req, res) => {
@@ -149,17 +149,28 @@ function save(){
 
 client.on('messageCreate', msg => {
 
+    console.log("Message Creation Detected: " + msg.content);
+
   // ignore self messages and other bot messages
   if (msg.author === client.user || msg.author.bot) {
+    console.log("Bot message detected")
     return;
   }
 
+  if (msg.content.startsWith('!')){
+    console.log("Started with ! detected")
+    load(saveData);
+    console.log("saveData loaded successfully")
+  }
+
   // restrict channels
-  else if (msg.channelId != 1065049126871515176 && msg.channelId != 1065064038427541594 && msg.channelId != 1053540259717189714){
+  if (msg.channelId != 1065049126871515176 && msg.channelId != 1065064038427541594 && msg.channelId != 1053540259717189714){
+    console.log("Wrong ChannelID detected")
     return;
   }
 
   else if (msg.content.toLowerCase().includes('!help-pokemon')){
+    console.log("Help detected")
     msg.channel.send("Here are the current commands:\n\n**!help-pokemon**   (displays commands)\n**!register**   (Creates a new game record for you if you don\'t have one already)\n**!catch [@people]**   (catches everyone mentioned)\n**!uncatch [@people]**   (reverts catches on everyone mentioned)\n**!status [@person]**   (gives point and pokedex status for the person mentioned)\n**!leaderboard**   (Gives the top 10 players with the most points)\n**!list-data**   (Lists everyone's points and pokedex progress)\n**!opt-out**   (Opts you out for playing the game. Any game messages that mention you will be deleted)\n**!opt-in**   (Opts you back in for playing the game)\n**!off-limits**   (Displays everyone who has opted out of playing the game)\n\n*The following commands are only availible to people with the \"PokemonBotManager\" tag:*\n\n**!clear-all-data**   (Erases all data. THIS CANNOT BE UNDONE!)\n**!increment-points [@person]**   (adds 1 point to the person mentioned)\n**!decrement-points [@person]**   (takes 1 point from the person mentioned)\n**!increment-rarity [@person]**   (increases the rarity value of the person mentioned by 1)\n**!decrement-rarity [@person]**   (decreases the rarity value of the person mentioned by 1)\n**!next-season**   (advances the game onto the next season. The seasons run in this order: FALL, WINTER, SPRING, SUMMER)")
   }
 
@@ -246,7 +257,10 @@ client.on('messageCreate', msg => {
       let caughtPerson = CaughtPerson[1];
 
       if (msg.author.id === caughtPerson.id) {
-        msg.channel.send(askAI("A user has tried to \"catch\" themselves. Ridicule them for attempting such a rediculous thing", msg.author.id));
+        askAI("A user has tried to \"catch\" themselves. Ridicule them for attempting such a rediculous thing", msg.author.id)
+        .then(async response => {
+            msg.channel.send(response);
+        })
       }
       else if (caughtPerson.id === process.env.PLOT_ARMOR_PERSON){
         msg.channel.send(askAI("A user has tried to \"catch\" another user, but was unsuccessful because of the other user's special PLOT ARMOR feature.", msg.author.id))
