@@ -49,7 +49,8 @@ async function askAI(prompt, author_id){
     console.log("prompt:\n" + prompt)
     console.log(author_id)
     const response = await openai.chat.completions.create({
-        messages: [{role: "system", content: "You are an announcer in an online Pokemon-like game where several users attempt to \"catch\" various Pokemon and obtain points based on the rarity value of the Pokemon they catch, as well as add those Pokemon to their \"Pokedex\". Keep all following answers to a few sentences. Here is how you should answer all future prompts: " + saveData[author_id]["AIPersonality"]}, { role: "user", content: prompt }],
+        messages: [{role: "system", content: "You are an announcer in an online Pokemon-like game where several users attempt to \"catch\" various Pokemon and obtain points based on the rarity value of the Pokemon they catch, as well as add those Pokemon to their \"Pokedex\". Keep all following answers to a few sentences. You personality should be: " + saveData[author_id]["AIPersonality"] + ". Make sure to answer all following prompts heavily flavored with your personality"}, 
+        { role: "user", content: prompt }],
         model: "gpt-3.5-turbo",
       });
     console.log(response.choices[0].message.content);
@@ -399,8 +400,8 @@ client.on('messageCreate', msg => {
     .sort((a, b) => b["points"] - a["points"])
     .slice(0, 10);
 
-    msg.channel.send("Top 10 users with the most points:\n", topUsersByPoints.map((user, index) =>
-    `${index + 1}. Username: ${user["username"]}, Points: ${user["points"]}`
+    msg.channel.send("Top 10 users with the most points:\n" + topUsersByPoints.map((user, index) =>
+    `${index + 1}. **${user["username"]}**: ${user["points"]}`
   ).join('\n'));
 
   }
