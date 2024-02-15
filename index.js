@@ -311,35 +311,35 @@ Here are the current commands:
             
             if (!person.roles){
                 saveData[msg.author.id]["points"] += 1;
-                askAI("User @" + msg.author.username + " has caught the NORMAL-rarity Pokemon " + "@" + caughtPerson.username + " and has recieved 1 point. Describe the catch!", msg.author.id)
+                askAI("The User @" + msg.author.username + " has caught the NORMAL-rarity Pokemon " + "@" + caughtPerson.username + " and has recieved 1 point. Describe the catch, while playfully ridiculing the caught Pokemon's personality, which is: " + saveData[caughtPerson.id]["AIPersonality"], msg.author.id)
                 .then(async response => {
                     msg.channel.send(response);
                 });
             }
             else if (person.roles.cache.some(role => role.name === "Uncommon")){
                 saveData[msg.author.id]["points"] += 3;
-                askAI("User @" + msg.author.username + " has caught the UNCOMMON-rarity Pokemon " + "@" + caughtPerson.username + " and has received 3 points. Describe the catch!", msg.author.id)
+                askAI("User @" + msg.author.username + " has caught the UNCOMMON-rarity Pokemon " + "@" + caughtPerson.username + " and has received 3 points. Describe the catch, while playfully ridiculing the caught Pokemon's personality, which is: " + saveData[caughtPerson.id]["AIPersonality"], msg.author.id)
                 .then(async response => {
                     msg.channel.send(response);
                 });
             }
             else if (person.roles.cache.some(role => role.name === "Rare")){
                 saveData[msg.author.id]["points"] += 5;
-                askAI("User @" + msg.author.username + " has caught the RARE-rarity Pokemon " + "@" + caughtPerson.username + " and has recieved 5 points! Describe the catch!", msg.author.id)
+                askAI("User @" + msg.author.username + " has caught the RARE-rarity Pokemon " + "@" + caughtPerson.username + " and has recieved 5 points! Describe the catch, while playfully ridiculing the caught Pokemon's personality, which is: " + saveData[caughtPerson.id]["AIPersonality"], msg.author.id)
                 .then(async response => {
                     msg.channel.send(response);
                 });
             }
             else if (person.roles.cache.some(role => role.name === "Shiny")){
                 saveData[msg.author.id]["points"] += 10;
-                askAI("User @" + msg.author.username + " HAS CAUGHT THE SHINY-rarity POKEMON " + "@" + caughtPerson.username + " AND HAS RECIEVED 10 POINTS! Describe the catch!", msg.author.id)
+                askAI("User @" + msg.author.username + " HAS CAUGHT THE SHINY-rarity POKEMON " + "@" + caughtPerson.username + " AND HAS RECIEVED 10 POINTS! Describe the catch, while playfully ridiculing the caught Pokemon's personality, which is: " + saveData[caughtPerson.id]["AIPersonality"], msg.author.id)
                 .then(async response => {
                     msg.channel.send(response);
                 });
             }
             else{
                 saveData[msg.author.id]["points"] += 1;
-                askAI("User @" + msg.author.username + " has caught the NORMAL-rarity Pokemon " + "@" + caughtPerson.username + " and has recieved 1 point. Describe the catch!", msg.author.id)
+                askAI("User @" + msg.author.username + " has caught the NORMAL-rarity Pokemon " + "@" + caughtPerson.username + " and has recieved 1 point. Describe the catch, while playfully ridiculing the caught Pokemon's personality, which is: " + saveData[caughtPerson.id]["AIPersonality"], msg.author.id)
                 .then(async response => {
                     msg.channel.send(response);
                 });;
