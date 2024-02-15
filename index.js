@@ -43,7 +43,7 @@ client.on('ready', () => {
 })
 
 // starts the regular updates to pokemon rarity
-cron.schedule('50 21 * * *', increaseRarity, {timezone: "America/New_York"});
+cron.schedule('00 00 * * *', increaseRarity, {timezone: "America/New_York"});
 
 async function askAI(prompt, author_id){
     console.log("prompt:\n" + prompt)
@@ -58,13 +58,12 @@ async function askAI(prompt, author_id){
 }
 
 function increaseRarity(){
+    console.log("triggering-rarity-increase")
     load(saveData);
     for (let user_id of Object.keys(saveData)) {
         user_id_num = Number(user_id)
         // if the user_id is only numbers
         if (user_id_num != NaN && saveData[user_id]["wants-to-play"] == true){
-            console.log(user_id)
-            console.log(user_id_num)
             
             const currentGuild = client.guilds.cache.find(g => g.id == process.env.GUILD_ID);
             
@@ -74,19 +73,19 @@ function increaseRarity(){
                 var rareRole = member.guild.roles.cache.find(role => role.name === "Rare");
                 var shinyRole = member.guild.roles.cache.find(role => role.name === "Shiny");
 
-                if (saveData[user_id]["rarityValue"] == 30){
+                if (saveData[user_id]["rarityValue"] >= 30){
                     member.roles.add(shinyRole);
                     member.roles.remove(rareRole);
                 }
-                else if (saveData[user_id]["rarityValue"] == 14){
+                else if (saveData[user_id]["rarityValue"] >= 14 && saveData[user_id]["rarityValue"] < 30){
                     member.roles.add(rareRole);
                     member.roles.remove(uncommonRole);
                 }
-                else if (saveData[user_id]["rarityValue"] == 7){
+                else if (saveData[user_id]["rarityValue"] >= 7 && saveData[user_id]["rarityValue"] < 14){
                     member.roles.add(uncommonRole);
                 }
                 else if (saveData[user_id]["rarityValue"] < 7) {
-                    if (member.roles && person.roles.cache.some(role => role.name === "Uncommon")){
+                    if (member.roles && member.roles.cache.some(role => role.name === "Uncommon")){
                         member.roles.remove(uncommonRole);
                     }
                 }
@@ -164,15 +163,39 @@ client.on('messageCreate', msg => {
   }
 
   else if (msg.content.toLowerCase().includes('!help-pokemon')){
-    msg.channel.send("Here are the current commands:\n\n**!help-pokemon**   (displays commands)\n**!register**   (Creates a new game record for you if you don\'t have one already)\n**!catch [@people]**   (catches everyone mentioned)\n**!uncatch [@people]**   (reverts catches on everyone mentioned)\n**!status [@person]**   (gives point and pokedex status for the person mentioned)\n**!leaderboard**   (Gives the top 10 players with the most points)\n**!list-data**   (Lists everyone's points and pokedex progress)\n**!opt-out**   (Opts you out for playing the game. Any game messages that mention you will be deleted)\n**!opt-in**   (Opts you back in for playing the game)\n**!off-limits**   (Displays everyone who has opted out of playing the game)\n\n*The following commands are only availible to people with the \"PokemonBotManager\" tag:*\n\n**!clear-all-data**   (Erases all data. THIS CANNOT BE UNDONE!)\n**!increment-points [@person]**   (adds 1 point to the person mentioned)\n**!decrement-points [@person]**   (takes 1 point from the person mentioned)\n**!increment-rarity [@person]**   (increases the rarity value of the person mentioned by 1)\n**!decrement-rarity [@person]**   (decreases the rarity value of the person mentioned by 1)\n**!next-season**   (advances the game onto the next season. The seasons run in this order: FALL, WINTER, SPRING, SUMMER)")
-  }
+    msg.channel.send(`
+Here are the current commands:
+
+**!help-pokemon**   (displays these commands)
+**!register**   (Creates a new game record for you if you don't have one already)
+**!catch [@people]**   (Catches everyone mentioned)
+**!uncatch [@people]**   (Reverts catches on everyone mentioned)
+**!status [@person]**   (Gives point and pokedex status for the person mentioned)
+**!leaderboard**   (Gives the top 10 players with the most points)
+**!list-data**   (Lists everyone's points and pokedex progress)
+**!opt-out**   (Opts you out for playing the game. Any game messages that mention you will be deleted)
+**!opt-in**   (Opts you back in for playing the game)
+**!off-limits**   (Displays everyone who has opted out of playing the game)
+**!set-personality**   (Sets the personality of your custom AI catch messages)
+
+*The following commands are only available to people with the "PokemonBotManager" tag:*
+
+**!clear-all-data**   (Erases all data. THIS CANNOT BE UNDONE!)
+**!increment-points [@person]**   (adds 1 point to the person mentioned)
+**!decrement-points [@person]**   (takes 1 point from the person mentioned)
+**!increment-rarity [@person]**   (increases the rarity value of the person mentioned by 1)
+**!decrement-rarity [@person]**   (decreases the rarity value of the person mentioned by 1)
+**!trigger-rarity-increase**   (Triggers an increase in EVERYONE\'S rarity, and assigns appropriate roles based on rarity value. This command automatically runs every day at midnight every day)
+**!next-season**   (advances the game onto the next season. The seasons run in this order: FALL, WINTER, SPRING, SUMMER)
+`);
+    }
 
   else if (msg.content.toLowerCase().startsWith('!set-personality')){
     personality = msg.content.substring(16);
     prev_personality = saveData[msg.author.id]["AIPersonality"];
     saveData[msg.author.id]["AIPersonality"] = personality;
 
-    msg.channel.send("Changed personality from " + prev_personality + " to " + personality);
+    msg.channel.send("Changed personality from **" + prev_personality + "** to **" + personality + "**");
 
     save();
   }
@@ -337,11 +360,17 @@ client.on('messageCreate', msg => {
         let uncatchPerson = undoCaughtPerson[1];
   
         if (msg.author.id === uncatchPerson.id) {
-          msg.channel.send("You can\'t uncatch yourself LOL :joy:")
+          askAI("A user has tried to release or \"uncatch\" themselves, which is against the rules. Ridicule them for attempting such a rediculous thing", msg.author.id)
+          .then(async response => {
+              msg.channel.send(response);
+          });
         }
   
         else if (uncatchPerson.id === process.env.BOT){
-          msg.channel.send("Bro tried to uncatch me :skull: :skull: :skull:");
+          askAI("A user has tried to release or \"uncatch\" YOU, which is against the rules. Ridicule them for attempting such a rediculous thing", msg.author.id)
+          .then(async response => {
+              msg.channel.send(response);
+          });
         }
           
         else {
@@ -354,13 +383,13 @@ client.on('messageCreate', msg => {
             if (!person.roles){
                 saveData[msg.author.id]["points"] -= 1;
             }
-            else if (person.roles.cache.some(role => role.id === process.env.UNCOMMON_ROLE)){
+            else if (person.roles.cache.some(role => role.name === "Uncommon")){
                 saveData[msg.author.id]["points"] -= 3;
             }
-            else if (person.roles.cache.some(role => role.id === process.env.RARE_ROLE)){
+            else if (person.roles.cache.some(role => role.name === "Rare")){
                 saveData[msg.author.id]["points"] -= 5;
             }
-            else if (person.roles.cache.some(role => role.id === process.env.SHINY_ROLE)){
+            else if (person.roles.cache.some(role => role.name === "Shiny")){
                 saveData[msg.author.id]["points"] -= 10;
             }
             else{
@@ -579,8 +608,7 @@ client.on('messageCreate', msg => {
       msg.channel.send("You are not a PokemonBotManager :eyes:");
     }
   }
-  else if (msg.content.toLowerCase().includes("!increase-rarity")){
-    console.log("increasing rarity")
+  else if (msg.content.toLowerCase().includes("!trigger-rarity-increase")){
       increaseRarity();
   }
 
