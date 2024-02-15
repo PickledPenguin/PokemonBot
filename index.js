@@ -182,7 +182,7 @@ Here are the current commands:
 **!opt-out**   (Opts you out for playing the game. Any game messages that mention you will be deleted)
 **!opt-in**   (Opts you back in for playing the game)
 **!off-limits**   (Displays everyone who has opted out of playing the game)
-**!set-personality**   (Sets the personality of your custom AI catch messages)
+**!set-personality [personality description]**   (Sets the personality of your custom AI catch messages to [personality description])
 
 *The following commands are only available to people with the "PokemonBotManager" tag:*
 
