@@ -61,12 +61,13 @@ function increaseRarity(){
     load(saveData);
     console.log(saveData);
     for (let user_id of Object.keys(saveData)) {
-        console.log(user_id)
+        console.log(user_id);
         user_id_num = Number(user_id)
         // if the user_id is only numbers
         if (user_id_num != NaN && saveData[user_id]["wants-to-play"] == true){
             
             const currentGuild = client.guilds.cache.find(g => g.id == process.env.GUILD_ID);
+            console.log()
             const uncommonRole = currentGuild.roles.cache.get(process.env.UNCOMMON_ROLE);
             const rareRole = currentGuild.roles.cache.get(process.env.RARE_ROLE);
             const shinyRole = currentGuild.roles.cache.get(process.env.SHINY_ROLE);
@@ -173,7 +174,11 @@ client.on('messageCreate', msg => {
 
   else if (msg.content.toLowerCase().startsWith('!set-personality')){
     personality = msg.content.substring(16);
+    prev_personality = saveData[msg.author.id]["AIPersonality"];
     saveData[msg.author.id]["AIPersonality"] = personality;
+
+    msg.channel.send("Changed personality from " + prev_personality + " to " + personality);
+
     save();
   }
 
