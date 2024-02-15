@@ -59,22 +59,21 @@ async function askAI(prompt, author_id){
 
 function increaseRarity(){
     load(saveData);
-    console.log(saveData);
     for (let user_id of Object.keys(saveData)) {
-        console.log(user_id);
         user_id_num = Number(user_id)
         // if the user_id is only numbers
         if (user_id_num != NaN && saveData[user_id]["wants-to-play"] == true){
+            console.log(user_id)
+            console.log(user_id_num)
             
             const currentGuild = client.guilds.cache.find(g => g.id == process.env.GUILD_ID);
-            console.log()
-            const uncommonRole = currentGuild.roles.cache.get(process.env.UNCOMMON_ROLE);
-            const rareRole = currentGuild.roles.cache.get(process.env.RARE_ROLE);
-            const shinyRole = currentGuild.roles.cache.get(process.env.SHINY_ROLE);
             
             currentGuild.members.fetch(user_id).then(member => {
-                
-                console.log(member.name);
+
+                var uncommonRole = member.guild.roles.cache.find(role => role.name === "Uncommon");
+                var rareRole = member.guild.roles.cache.find(role => role.name === "Rare");
+                var shinyRole = member.guild.roles.cache.find(role => role.name === "Shiny");
+
                 if (saveData[user_id]["rarityValue"] == 30){
                     member.roles.add(shinyRole);
                     member.roles.remove(rareRole);
@@ -87,19 +86,15 @@ function increaseRarity(){
                     member.roles.add(uncommonRole);
                 }
                 else if (saveData[user_id]["rarityValue"] < 7) {
-                    if (member.roles && member.roles.cache.has(uncommonRole.id)){
+                    if (member.roles && person.roles.cache.some(role => role.name === "Uncommon")){
                         member.roles.remove(uncommonRole);
                     }
                 }
-                console.log(saveData[user_id]["rarityValue"])
                 saveData[user_id]["rarityValue"] += 1;
                 save();
-                console.log(saveData[user_id]["rarityValue"])
             }).catch(error => console.log(error));
         }
     }
-    load();
-    console.log(saveData)
 }
 
 // function to split up messages to send separately, to avoid issues with discord's limit of 2000 characters.
@@ -292,21 +287,21 @@ client.on('messageCreate', msg => {
                     msg.channel.send(response);
                 });
             }
-            else if (person.roles.cache.some(role => role.id === process.env.UNCOMMON_ROLE)){
+            else if (person.roles.cache.some(role => role.name === "Uncommon")){
                 saveData[msg.author.id]["points"] += 3;
                 askAI("User @" + msg.author.username + " has caught the UNCOMMON-rarity Pokemon " + "@" + caughtPerson.username + " and has received 3 points. Describe the catch!", msg.author.id)
                 .then(async response => {
                     msg.channel.send(response);
-                });;
+                });
             }
-            else if (person.roles.cache.some(role => role.id === process.env.RARE_ROLE)){
+            else if (person.roles.cache.some(role => role.name === "Rare")){
                 saveData[msg.author.id]["points"] += 5;
                 askAI("User @" + msg.author.username + " has caught the RARE-rarity Pokemon " + "@" + caughtPerson.username + " and has recieved 5 points! Describe the catch!", msg.author.id)
                 .then(async response => {
                     msg.channel.send(response);
-                });;
+                });
             }
-            else if (person.roles.cache.some(role => role.id === process.env.SHINY_ROLE)){
+            else if (person.roles.cache.some(role => role.name === "Shiny")){
                 saveData[msg.author.id]["points"] += 10;
                 askAI("User @" + msg.author.username + " HAS CAUGHT THE SHINY-rarity POKEMON " + "@" + caughtPerson.username + " AND HAS RECIEVED 10 POINTS! Describe the catch!", msg.author.id)
                 .then(async response => {
@@ -424,19 +419,6 @@ client.on('messageCreate', msg => {
 
     for (chunk of messageChunks) {
       msg.channel.send(chunk);
-    }
-  }
-
-  else if (msg.content.toLowerCase().includes("!clear-all-data")) {
-
-    if (msg.member.roles.cache.some(role => role.name === 'PokemonBotManager') || msg.author.id === process.env.AUTHOR_ID) {
-      // clear all data
-      saveData = {};
-      save()
-      msg.channel.send("All data cleared")
-    }
-    else {
-      msg.channel.send("You are not a PokemonBotManager :eyes:");
     }
   }
     
@@ -598,8 +580,8 @@ client.on('messageCreate', msg => {
     }
   }
   else if (msg.content.toLowerCase().includes("!increase-rarity")){
+    console.log("increasing rarity")
       increaseRarity();
-      console.log("increasing rarity")
   }
 
 })
