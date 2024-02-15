@@ -88,6 +88,12 @@ function increaseRarity(){
                     if (member.roles && member.roles.cache.some(role => role.name === "Uncommon")){
                         member.roles.remove(uncommonRole);
                     }
+                    if (member.roles && member.roles.cache.some(role => role.name === "Rare")){
+                        member.roles.remove(rareRole);
+                    }
+                    if (member.roles && member.roles.cache.some(role => role.name === "Shiny")){
+                        member.roles.remove(shinyRole);
+                    }
                 }
                 saveData[user_id]["rarityValue"] += 1;
                 save();
