@@ -49,7 +49,7 @@ async function askAI(prompt, author_id){
     console.log("prompt:\n" + prompt)
     console.log(author_id)
     const response = await openai.chat.completions.create({
-        messages: [{role: "system", content: "You are an announcer in an online Pokemon-like game where several users attempt to \"catch\" various Pokemon and obtain points based on the rarity value of the Pokemon they catch, as well as add those Pokemon to their \"Pokedex\". Keep all following answers to a few sentences. You personality should be: " + saveData[author_id]["AIPersonality"] + ". Make sure to answer all following prompts heavily flavored with your personality"}, 
+        messages: [{role: "system", content: "You are an announcer in an online Pokemon-like game where several users attempt to \"catch\" various Pokemon and obtain points based on the rarity value of the Pokemon they catch, as well as add those Pokemon to their \"Pokedex\". Keep all following answers to a very short, concise paragraph. You personality should be: " + saveData[author_id]["AIPersonality"] + ". Make sure to answer all following prompts heavily flavored with your personality"}, 
         { role: "user", content: prompt }],
         model: "gpt-3.5-turbo",
       });
@@ -289,7 +289,7 @@ Here are the current commands:
             msg.channel.send(response);
         });
       }
-      else if (caughtPerson.id === process.env.PLOT_ARMOR_PERSON){
+      else if (caughtPerson.id === saveData["PLOT_ARMOR_PERSON_ID"]){
         askAI("A user has tried to \"catch\" another user, but was unsuccessful because of the other user's special PLOT ARMOR feature.", msg.author.id)
         .then(async response => {
             msg.channel.send(response);
@@ -616,6 +616,43 @@ Here are the current commands:
   }
   else if (msg.content.toLowerCase().includes("!trigger-rarity-increase")){
       increaseRarity();
+  }
+
+
+
+  // Tournament ADDONS
+
+  function dubWithPlotArmor(PLOT_ARMOR_PERSON){
+    saveData["PLOT_ARMOR_PERSON_ID"] = PLOT_ARMOR_PERSON.id
+  }
+
+  async function msgTournamentUpdate(){
+    const pokemon_channel = await client.channels.fetch(process.env.POKEMON_CHANNEL_ID)
+    if (!channel){return}
+
+    load(saveData);
+    let topUsersByPoints = Object.values(saveData)
+    .filter(user => user["wants-to-play"])
+    .sort((a, b) => b["points"] - a["points"])
+    .slice(0, 10);
+
+    pokemon_channel.send("Here is the daily Tournament Update!:\n" + topUsersByPoints.map((user, index) =>
+    `${index + 1}. **${user["username"]}**: ${user["points"]}`
+  ).join('\n'));
+
+  }
+
+  async function msgPlotArmorUpdate(){
+    const pokemon_channel = await client.channels.fetch(process.env.POKEMON_CHANNEL_ID)
+    if (!channel){return}
+
+    load(saveData)
+
+    let topUserByPoints = Object.values(saveData)
+    .filter(user => user["wants-to-play"])
+    .sort((a, b) => b["points"] - a["points"])[0];
+
+    pokemon_channel.send("Congradulations to the player with the most points this week")
   }
 
 })
