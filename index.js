@@ -622,6 +622,22 @@ Here are the current commands:
 
   // Tournament ADDONS
 
+  else if (msg.content.toLowerCase().includes("!perks")) {
+    msg.channel.send(`
+Here are the current perks and how to earn them:
+
+**PLOT ARMOR**: 
+- Awarded to the two players with the most points and varied pokedex at the end of every week
+- This perk will block the next catch that mentions you!
+- One time use
+
+**DYNAMAX**
+- Awarded 
+- This perk
+
+`);
+  }
+
   function dubWithPlotArmor(PLOT_ARMOR_PERSON){
     saveData["PLOT_ARMOR_PERSON_ID"] = PLOT_ARMOR_PERSON.id
   }
@@ -652,7 +668,7 @@ Here are the current commands:
     .filter(user => user["wants-to-play"])
     .sort((a, b) => b["points"] - a["points"])[0];
 
-    pokemon_channel.send("Congradulations to the player with the most points this week")
+    pokemon_channel.send("Congratulations to the player with the most points and the winner of the PLOT ARMOR perk this week: **" + topUserByPoints + "**")
   }
 
 })
