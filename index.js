@@ -6,8 +6,8 @@ const POSSIBLE_PERKS = {
   "VERMIN_WHISPERER_PERSON_ID": "Vermin Whisperer",
 };
 
-const ALLOWED_CHANNELS=[1065049126871515176n, 1065064038427541594n, 1053540259717189714n]
-
+//const ALLOWED_CHANNELS=["1065049126871515176", "1065064038427541594", "1053540259717189714"]
+const ALLOWED_CHANNELS=["1065064038427541594", "1053540259717189714"]
 
 
 const express = require('express')
@@ -16,8 +16,24 @@ const fs = require('fs')
 var cron = require('node-cron')
 require("dotenv").config()
 
-// imports all the util functions
-var util = require('./util')
+// imports all the util functions we need
+var {
+  cmd,
+  askAI,
+  adjustPoints,
+  setRarity,
+  increaseRarity,
+  sendLongMessage,
+  setupDefaultsIfNecessary,
+  checkOffLimits,
+  load,
+  save,
+  awardPointsAndSendMessage,
+  handleSpecialPerks,
+  isCatchAllowed,
+  setCatchCooldown,
+  msgPerkUpdate,
+} = require('./util');
 
 // imports all the long typed messages
 var written_messages = require('./written-messages')
@@ -62,12 +78,16 @@ cron.schedule('0 12 * * 0', msgPerkUpdate, { timezone: "America/New_York" });
 
 client.on('messageCreate', async msg => {
 
-  // ignore non-commands, self messages, and other bot messages. Restrict messages to only the allowed channels
-  if (!msg.content.startsWith('!') || msg.author === client.user || msg.author.bot || !ALLOWED_CHANNELS.includes(msg.channel.id)) {
+  // ignore self messages and other bot messages. Restrict messages to only the allowed channels
+  if (msg.author === client.user || msg.author.bot || !ALLOWED_CHANNELS.includes(msg.channel.id)) {
     return;
   }
 
-  else if (cmd(msg, 'help-pokemon')){
+  if (msg.content.startsWith('!')){
+    saveData = load(saveData);
+  }
+
+  if (cmd(msg, 'help-pokemon')){
     sendLongMessage(msg.channel, written_messages.HELP_POKEMON);
   }
 
@@ -117,17 +137,20 @@ client.on('messageCreate', async msg => {
       try {
 
         // Get the status person's data
+        console.log(statusPerson.id);
+        console.log(saveData[statusPerson.id])
         userData = saveData[statusPerson.id];
+        console.log(userData);
 
         if (!userData) {
-            msg.channel.send("@" + statusPerson.username + " has 0 points and no pokedex");
+            msg.channel.send("@" + statusPerson.username + " has no available data");
         } else {
     
-          let Pokedex = "{\n";
+          let pokedex = "{\n";
           for (let pokemon of Object.values(saveData[statusPerson.id]["pokedex"])) {
-            Pokedex += "\t" + pokemon + ": " + userData["pokedex"][pokemon] + "\n";
+            pokedex += "\t" + pokemon + ": " + userData["pokedex"][pokemon] + "\n";
           }
-          Pokedex += "}";
+          pokedex += "}";
 
           let perks_list = "{\n";
           for (const [perkId, perkName] of Object.entries(POSSIBLE_PERKS)) {
@@ -137,15 +160,21 @@ client.on('messageCreate', async msg => {
           }
           perks_list += "}";
           
-          msg.channel.send("**@" + statusPerson.username + " Status**:\n\n Overall points: " + saveData[statusPerson.id]["points"] 
-            + "\nWeekly points: " + saveData[statusPerson.id]["weekly_points"] 
-            + "\nOverall BARNABY points: " + saveData[statusPerson.id]["barnaby_points"] 
-            + "\nWeekly BARNABY points: " + saveData[statusPerson.id]["weekly_barnaby_points"] 
-            + "\nPokedex: \n" + Pokedex
-            + "\nPerks:" + perks_list );
+          msg.channel.send(
+`
+**@${statusPerson.username}'s Status**:
+*Overall points:* ${saveData[statusPerson.id]["points"] || 0}
+*Weekly points:* ${saveData[statusPerson.id]["weekly_points"] || 0}
+*Overall BARNABY points:* ${saveData[statusPerson.id]["barnaby_points"] || 0}
+*Weekly BARNABY points:* ${saveData[statusPerson.id]["weekly_barnaby_points"] || 0}
+*Pokedex:* ${pokedex == "{\n}" ? "No Pokedex" : pokedex}
+*Perks:* ${perks_list == "{\n}" ? "No Perks" : perks_list}
+`
+          );
         }
       } catch (e) {
         // if no status found for author
+        console.log(e);
         msg.channel.send("No status found for @" + statusPerson.username);
       }
     }

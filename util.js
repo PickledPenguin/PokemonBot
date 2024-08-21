@@ -1,4 +1,10 @@
 // All helper functions for index.js
+const express = require('express')
+const app = express()
+const fs = require('fs')
+var cron = require('node-cron')
+require("dotenv").config()
+
 
 function cmd(msg, command_string){
     return msg.content.toLowerCase().includes(command_string);
@@ -66,16 +72,14 @@ function setRarity(msg, setRarityPerson, amount) {
 
     setupDefaultsIfNecessary(setRarityPerson);
 
-    if (saveData[setRarityPerson.id]["rarity"] === 0 && amount < 0) {
+    if (saveData[setRarityPerson.id]["rarityValue"] === 0 && amount < 0) {
         msg.channel.send(`${setRarityPerson.username}'s rarity value is already at the minimum value of 0.`);
     } else {
-        saveData[setRarityPerson.id]["rarity"] = amount;
+        saveData[setRarityPerson.id]["rarityValue"] = amount;
         msg.channel.send(`Set ${setRarityPerson.username}'s rarity value to ${amount}`);
         save();
     }
 }
-
-
 
 function increaseRarity(){
     console.log("triggering-rarity-increase");
@@ -132,9 +136,9 @@ function increaseRarity(){
             }).catch(error => console.log(error));
         }
     }
-  }
+}
 
-  // function to split up messages to send separately, to avoid issues with discord's limit of 2000 characters.
+// function to split up messages to send separately, to avoid issues with discord's limit of 2000 characters.
 function splitMessage(str, size) {
     const numChunks = Math.ceil(str.length / size)
     const chunks = new Array(numChunks)
@@ -162,27 +166,38 @@ function setupDefaultsIfNecessary(user){
 }
 
 function checkOffLimits(msg){
-  let isOffLimits = false;
-  for (let Person of msg.mentions.users) {
-    let person = Person[1];
-    if (!saveData[person.id] || saveData[person.id]["wants-to-play"] == false){
-      isOffLimits = true;
-      break;
+    saveData = load(saveData);
+    let isOffLimits = false;
+    for (let Person of msg.mentions.users) {
+        let person = Person[1];
+        console.log(person)
+        if (!saveData[person.id] || saveData[person.id]["wants-to-play"] == false){
+            console.log(saveData[person.id]);
+            isOffLimits = true;
+            break;
+        }
     }
-  }
-  if (isOffLimits){
-    msg.channel.send("There was someone mentioned in your message that has not registered or has opted out from playing the game!");
-    msg.delete();
-    return true;
-  }
-  return false;
+    if (isOffLimits){
+        msg.channel.send("There was someone mentioned in your message that has not registered or has opted out from playing the game!");
+        msg.delete();
+        return true;
+    }
+    return false;
 }
 
 function load(saveData) {
     try {
       saveData = JSON.parse(fs.readFileSync('./save-data.json', 'utf8'));
     } catch (e) {
-      saveData = {}; // init if no data found
+        // init if no data found
+        saveData = {
+            "PLOT_ARMOR_PERSON_ID": undefined,
+            "DYNAMAX_PEOPLE_ID": [],
+            "VERMIN_WHISPERER_PERSON_ID": undefined,
+            "SWIPER_PEOPLE_ID": [],
+            "BOUNTY_PERSON_ID": undefined,
+            "catchCooldowns": {}
+        }
     }
     return saveData;
 }
@@ -294,6 +309,9 @@ function handleSpecialPerks(msg, catcher, caughtPerson) {
 // Function to check if a catch is allowed based on cooldowns
 function isCatchAllowed(catcherId, caughtId) {
   saveData = load(saveData);
+  if (saveData["catchCooldowns"] === undefined){
+    saveData["catchCooldowns"] = {};
+  }
 
   const key = `${catcherId}-${caughtId}`;
   const reverseKey = `${caughtId}-${catcherId}`;
@@ -301,12 +319,19 @@ function isCatchAllowed(catcherId, caughtId) {
   const now = Date.now();
   const cooldownExpiry = saveData["catchCooldowns"][key] || saveData["catchCooldowns"][reverseKey];
 
-  if (cooldownExpiry && now < cooldownExpiry) {
-      const remainingTimeMs = cooldownExpiry - now;
-      const remainingTimeMinutes = Math.ceil(remainingTimeMs / (1000 * 60)); // Convert milliseconds to minutes
-      // Return two data points: That the catch isn't allowed and also how much remaining time until the cooldown is over
-      return { allowed: false, remainingTime: remainingTimeMinutes };
-  }
+  if (!cooldownExpiry){
+    return { allowed: true };
+  } 
+  else if (now < cooldownExpiry) {
+    const remainingTimeMs = cooldownExpiry - now;
+    const remainingTimeMinutes = Math.ceil(remainingTimeMs / (1000 * 60)); // Convert milliseconds to minutes
+    // Return two data points: That the catch isn't allowed and also how much remaining time until the cooldown is over
+    return { allowed: false, remainingTime: remainingTimeMinutes };
+  } 
+  // Remove the expired cooldown record to keep the database clean
+  delete saveData["catchCooldowns"][key];
+  delete saveData["catchCooldowns"][reverseKey];
+  save(saveData);
   // Return that the catch is allowed
   return { allowed: true };
 }
@@ -319,6 +344,7 @@ function setCatchCooldown(catcherId, caughtId) {
   const expiryTime = Date.now() + cooldownDuration;
 
   saveData = load(saveData);
+
   if (saveData["catchCooldowns"] === undefined){
     saveData["catchCooldowns"] = {};
   }
@@ -329,7 +355,7 @@ function setCatchCooldown(catcherId, caughtId) {
 
 
 function dubPlotArmor(PLOT_ARMOR_PERSON){
-  saveData["PLOT_ARMOR_PERSON_ID"] = PLOT_ARMOR_PERSON.id
+  saveData["PLOT_ARMOR_PERSON_ID"] = PLOT_ARMOR_PERSON.id;
 }
 
 function dubDynamax(DYNAMAX_PERSON) {
@@ -469,3 +495,22 @@ async function msgPerkUpdate() {
       console.error("An error occurred during the tournament update:", error);
   }
 }
+
+// Export all the functions needed
+module.exports = {
+    cmd,
+    askAI,
+    adjustPoints,
+    setRarity,
+    increaseRarity,
+    sendLongMessage,
+    setupDefaultsIfNecessary,
+    checkOffLimits,
+    load,
+    save,
+    awardPointsAndSendMessage,
+    handleSpecialPerks,
+    isCatchAllowed,
+    setCatchCooldown,
+    msgPerkUpdate
+};

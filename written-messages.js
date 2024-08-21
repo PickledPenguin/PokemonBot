@@ -65,9 +65,9 @@ All perk benefits stack.
 - One time use
 
 **BOUNTY**
-- Awarded to the player with the highest rarity (Must be Rare or higher to be eligible). If there is a tie, one player is randomly chosen among the tied players.
+- Awarded to the player with the highest rarity. If there is a tie, a player is randomly chosen among those tied.
 - This perk doubles the points of ALL catches you make while you have it!
 - If you are caught, the points given to your catcher are doubled and the perk is removed
 `;
 
-export default {HELP_COMMANDS, HELP_POKEMON, HELP_PERKS}
+module.exports = { HELP_POKEMON, HELP_COMMANDS, HELP_PERKS };
