@@ -5,6 +5,25 @@ const fs = require('fs')
 var cron = require('node-cron')
 require("dotenv").config()
 
+const { OpenAI } = require("openai");
+const openai = new OpenAI({
+    apiKey: process.env.OPEN_AI_TOKEN,
+});
+
+const discord = require('discord.js')
+const { Client, GatewayIntentBits } = require('discord.js');
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildPresences,
+  ]
+});
+
+var saveData;
+global.saveData = load(saveData);
 
 function cmd(msg, command_string){
     return msg.content.toLowerCase().includes(command_string);
@@ -77,7 +96,7 @@ function setRarity(msg, setRarityPerson, amount) {
     } else {
         saveData[setRarityPerson.id]["rarityValue"] = amount;
         msg.channel.send(`Set ${setRarityPerson.username}'s rarity value to ${amount}`);
-        save();
+        save(saveData);
     }
 }
 
@@ -132,7 +151,7 @@ function increaseRarity(){
   
                 // Increment the user's rarity value
                 saveData[user_id]["rarityValue"] += 1;
-                save();
+                save(saveData);
             }).catch(error => console.log(error));
         }
     }
@@ -160,9 +179,9 @@ function sendLongMessage(channel, message) {
 
 function setupDefaultsIfNecessary(user){
   if (saveData[user.id] === undefined) {
-    saveData[user.id] = {"points": 0, "weekly_points": 0,"barnaby_points": 0,"weekly_barnaby_points": 0,"username":user.username,"pokedex":{},"wants-to-play":true,"rarityValue":0,"AIPersonality":"Pokemon Announcer"};
+    saveData[user.id] = {"id": user.id, "points": 0, "weekly_points": 0,"barnaby_points": 0,"weekly_barnaby_points": 0,"username":user.username,"pokedex":{},"wants-to-play":true,"rarityValue":0,"AIPersonality":"Pokemon Announcer"};
   }
-  save();
+  save(saveData);
 }
 
 function checkOffLimits(msg){
@@ -185,12 +204,14 @@ function checkOffLimits(msg){
     return false;
 }
 
-function load(saveData) {
+function load() {
     try {
-      saveData = JSON.parse(fs.readFileSync('./save-data.json', 'utf8'));
+      var saveData = JSON.parse(fs.readFileSync('./save-data.json', 'utf8'));
     } catch (e) {
         // init if no data found
-        saveData = {
+        var saveData = {
+            "SEASON_ID": "WINTER",
+            "SEASON_EMOJI": ":snowflake:",
             "PLOT_ARMOR_PERSON_ID": undefined,
             "DYNAMAX_PEOPLE_ID": [],
             "VERMIN_WHISPERER_PERSON_ID": undefined,
@@ -202,106 +223,115 @@ function load(saveData) {
     return saveData;
 }
 
-function save(){
+function save(saveData){
   fs.writeFileSync('./save-data.json', JSON.stringify(saveData));
 }
 
-function awardPointsAndSendMessage(msg, catcher, caughtPerson, rarity, basePoints, multiplier) {
+function awardPointsAndSendMessage(msg, catcherID, caughtPersonID, rarity, basePoints, multiplier) {
   let pointsAwarded = basePoints * multiplier;
 
+  catcherUsername = saveData[String(catcherID)]["username"];
+  caughtPersonUsername = saveData["" + caughtPersonID]["username"];
+
   // Check if caughtPerson is a Barnaby catch 
-  if (msg.mentions.users.size == 1 && caughtPerson.id === process.env.BARNABY_ID) {
+  if (msg.mentions.users.size == 1 && caughtPersonID === process.env.BARNABY_ID) {
     // Find the amount of unique attachments in the catch message
     const uniqueAttachments = new Set();
     msg.attachments.forEach(attachment => {
       uniqueAttachments.add(attachment.url);
     });
     let attachment_limit = process.env.BARNABY_ATTACHMENT_LIMIT
-    if (uniqueAttachments.size > process.env.BARNABY_ATTACHMENT_LIMIT) {
+    if (uniqueAttachments.size > attachment_limit) {
       // Limit the attachments to 10
       msg.channel.send("Sorry! The limit for BARNABY attachments is " + attachment_limit + " so only " + attachment_limit + " of the provided attachments will count.") 
     }
     pointsAwarded = (basePoints + Math.min(uniqueAttachments.size, attachment_limit)) * multiplier;
     // Keep track of barnaby points for perk reasons. Actual points are also recorded further below
-    saveData[catcher.id]["barnaby_points"] += pointsAwarded;
-    saveData[catcher.id]["weekly_barnaby_points"] += pointsAwarded;
+    saveData[catcherID]["barnaby_points"] += pointsAwarded;
+    saveData[catcherID]["weekly_barnaby_points"] += pointsAwarded;
 
     // Send the catch AI message for Barnaby catch
-    askAI(`User @${catcher.username} has caught ${uniqueAttachments.size} of a specially abundant type of Pokémon called "BARNABY" Pokémon and received ${pointsAwarded} points! Describe the catch, while playfully ridiculing the caught BARNABY personality, which is: ${saveData[caughtPerson.id]["AIPersonality"]}`, catcher.id)
+    askAI(`User @${catcherUsername} has caught ${uniqueAttachments.size} of a specially abundant type of Pokémon called "BARNABY" Pokémon and received ${pointsAwarded} points! Describe the catch, while playfully ridiculing the caught BARNABY personality, which is: ${saveData[caughtPersonID]["AIPersonality"]}`, catcherID)
       .then(response => sendLongMessage(msg.channel,response));
 
   } else {
 
     // Send the catch AI message
-    askAI(`User @${catcher.username} has caught the ${rarity}-rarity Pokémon @${caughtPerson.username} and received ${pointsAwarded} points! Describe the catch, while playfully ridiculing the caught Pokémon's personality, which is: ${saveData[caughtPerson.id]["AIPersonality"]}`, catcher.id)
+    askAI(`User @${catcherUsername} has caught the ${rarity}-rarity Pokémon @${caughtPersonUsername} and received ${pointsAwarded} points! Describe the catch, while playfully ridiculing the caught Pokémon's personality, which is: ${saveData[caughtPersonID]["AIPersonality"]}`, catcherID)
       .then(response => sendLongMessage(msg.channel,response));
   }
 
   // Add points to the catcher
-  saveData[catcher.id]["points"] += pointsAwarded;
-  saveData[catcher.id]["weekly_points"] += pointsAwarded;
+  saveData[catcherID]["points"] += pointsAwarded;
+  saveData[catcherID]["weekly_points"] += pointsAwarded;
 
   // Deduct half the base points from the caught person (minimum of 1)
   const deduction = Math.max(Math.floor(basePoints / 2), 1);
   // Only deduct TOTAL points
-  saveData[caughtPerson.id]["points"] -= deduction;
+  saveData[caughtPersonID]["points"] -= deduction;
+
+  save(saveData);
 }
 
-function handleSpecialPerks(msg, catcher, caughtPerson) {
+function handleSpecialPerks(msg, catcherID, caughtPersonID) {
   let multiplier = 1;
+  catcherUsername = saveData[String(catcherID)]["username"];
+  caughtPersonUsername = saveData[String(caughtPersonID)]["username"];
 
   // Plot Armor Perk
-  if (caughtPerson.id === saveData["PLOT_ARMOR_PERSON_ID"]) {
-    askAI(`A user (@${catcher.username}) has tried to 'catch' another user (@${caughtPerson.username}), but was unsuccessful because of @${caughtPerson.username}'s special PLOT ARMOR feature.`, catcher.id)
+  if (caughtPersonID === saveData["PLOT_ARMOR_PERSON_ID"]) {
+    askAI(`A user (@${catcherUsername}) has tried to 'catch' another user (@${caughtPersonUsername}), but was unsuccessful because of @${caughtPersonUsername}'s special PLOT ARMOR feature.`, catcherID)
       .then(response => sendLongMessage(msg.channel,response));
     saveData["PLOT_ARMOR_PERSON_ID"] = "";
-    msg.channel.send(`@${caughtPerson.username} has used their PLOT ARMOR perk to avoid being caught!`);
+    msg.channel.send(`@${caughtPersonUsername} has used their PLOT ARMOR perk to avoid being caught!`);
     return null; // Return null meaning the catch was unsuccessful
-}
+  }
 
   // Dynamax Perk
-  const dynamaxIndex = saveData["DYNAMAX_PEOPLE_ID"].indexOf(catcher.id);
+  const dynamaxIndex = saveData["DYNAMAX_PEOPLE_ID"].indexOf(catcherID);
   if (dynamaxIndex !== -1) {
     multiplier *= 3;
     // Use up Dynamax Perk
     saveData["DYNAMAX_PEOPLE_ID"][dynamaxIndex] = undefined;
-    msg.channel.send(`@${catcher.username} has used their DYNAMAX perk to triple their points from this catch!`);
+    msg.channel.send(`@${catcherUsername} has used their DYNAMAX perk to triple their points from this catch!`);
   }
 
   // Vermin Whisperer Perk
-  if (caughtPerson.id === saveData["VERMIN_WHISPERER_PERSON_ID"]) {
+  if (caughtPersonID === saveData["VERMIN_WHISPERER_PERSON_ID"]) {
     let deductedPoints = process.env.VERMIN_STEAL_AMOUNT;
-    msg.channel.send(`@${catcher.username} has caught @${caughtPerson.username}, who has the VERMIN WHISPERER perk, which steals ${deductedPoints} point(s) from @${catcher.username}'s TOTAL points!`);
+    msg.channel.send(`@${catcherUsername} has caught @${caughtPersonUsername}, who has the VERMIN WHISPERER perk, which steals ${deductedPoints} point(s) from @${catcherUsername}'s TOTAL points!`);
 
-    saveData[caughtPerson.id]["points"] += deductedPoints;
-    saveData[caughtPerson.id]["weekly_points"] += deductedPoints;
+    saveData[caughtPersonID]["points"] += deductedPoints;
+    saveData[caughtPersonID]["weekly_points"] += deductedPoints;
     // Only deduct from TOTAL points
-    saveData[catcher.id]["points"] -= deductedPoints;
+    saveData[catcherID]["points"] -= deductedPoints;
   }
 
   // Swiper Perk
-  const swiperIndex = saveData["SWIPER_PEOPLE_ID"].indexOf(catcher.id);
+  const swiperIndex = saveData["SWIPER_PEOPLE_ID"].indexOf(catcherID);
   if (swiperIndex !== -1) {
     // Use up the Swiper perk
     saveData["SWIPER_PEOPLE_ID"][swiperIndex] = undefined;
-    let stolenPoints = Math.max(Math.floor(saveData[caughtPerson.id]["points"] * (process.env.SWIPER_STEAL_PERCENTAGE / 100)), 1);
-    msg.channel.send(`@${catcher.username} has used their SWIPER perk to steal ${stolenPoints} (${process.env.SWIPER_STEAL_PERCENTAGE}%) of @${caughtPerson.username}'s TOTAL points!`);
+    let stolenPoints = Math.max(Math.floor(saveData[caughtPersonID]["points"] * (process.env.SWIPER_STEAL_PERCENTAGE / 100)), 1);
+    msg.channel.send(`@${catcherUsername} has used their SWIPER perk to steal ${stolenPoints} (${process.env.SWIPER_STEAL_PERCENTAGE}%) of @${caughtPersonUsername}'s TOTAL points!`);
 
-    saveData[catcher.id]["points"] += stolenPoints;
-    saveData[catcher.id]["weekly_points"] += stolenPoints;
+    saveData[catcherID]["points"] += stolenPoints;
+    saveData[catcherID]["weekly_points"] += stolenPoints;
     // Only deduct from TOTAl points
-    saveData[caughtPerson.id]["points"] -= stolenPoints;
+    saveData[caughtPersonID]["points"] -= stolenPoints;
   }
 
   // Bounty Perk
-  if (saveData["BOUNTY_PERSON_ID"] === catcher.id) {
+  if (saveData["BOUNTY_PERSON_ID"] === catcherID) {
     multiplier *= 2;
     msg.channel.send(`${catcher} has the BOUNTY perk, which has doubled their points from this catch!`);
-  } else if (saveData["BOUNTY_PERSON_ID"] === caughtPerson.id) {
+  } else if (saveData["BOUNTY_PERSON_ID"] === caughtPersonID) {
     multiplier *= 2;
     saveData["BOUNTY_PERSON_ID"] = "";
-    msg.channel.send(`@${catcher.username} has caught a Pokémon with the BOUNTY perk, doubling their points! @${caughtPerson.username} has been caught, removing their BOUNTY perk.`);
+    msg.channel.send(`@${catcherUsername} has caught a Pokémon with the BOUNTY perk, doubling their points! @${caughtPersonUsername} has been caught, removing their BOUNTY perk.`);
   }
+
+  save(saveData);
 
   return multiplier;
 }
@@ -316,15 +346,14 @@ function isCatchAllowed(catcherId, caughtId) {
   const key = `${catcherId}-${caughtId}`;
   const reverseKey = `${caughtId}-${catcherId}`;
   
-  const now = Date.now();
+  const nowInMinutes = Math.ceil(Date.now() / (60 * 1000));
   const cooldownExpiry = saveData["catchCooldowns"][key] || saveData["catchCooldowns"][reverseKey];
 
   if (!cooldownExpiry){
     return { allowed: true };
   } 
-  else if (now < cooldownExpiry) {
-    const remainingTimeMs = cooldownExpiry - now;
-    const remainingTimeMinutes = Math.ceil(remainingTimeMs / (1000 * 60)); // Convert milliseconds to minutes
+  else if (nowInMinutes < cooldownExpiry) {
+    const remainingTimeMinutes = cooldownExpiry - nowInMinutes;
     // Return two data points: That the catch isn't allowed and also how much remaining time until the cooldown is over
     return { allowed: false, remainingTime: remainingTimeMinutes };
   } 
@@ -338,10 +367,11 @@ function isCatchAllowed(catcherId, caughtId) {
 
 // Function to set a cooldown for a catch
 function setCatchCooldown(catcherId, caughtId) {
-  const cooldownDuration = 60 * 1000 * process.env.COOLDOWN_MINUTES; // in milliseconds
+  const cooldownDurationInMinutes = Number(process.env.COOLDOWN_MINUTES);
   const key = `${catcherId}-${caughtId}`;
   const reverseKey = `${caughtId}-${catcherId}`;
-  const expiryTime = Date.now() + cooldownDuration;
+  const nowInMinutes = Math.ceil(Date.now() / (60 * 1000));
+  const expiryTime = nowInMinutes + cooldownDurationInMinutes;
 
   saveData = load(saveData);
 
@@ -350,154 +380,171 @@ function setCatchCooldown(catcherId, caughtId) {
   }
   saveData["catchCooldowns"][key] = expiryTime;
   saveData["catchCooldowns"][reverseKey] = expiryTime;
-  save();
+  save(saveData);
 }
 
-
-function dubPlotArmor(PLOT_ARMOR_PERSON){
+function dubPlotArmor(saveData, PLOT_ARMOR_PERSON){
+  console.log(PLOT_ARMOR_PERSON);
   saveData["PLOT_ARMOR_PERSON_ID"] = PLOT_ARMOR_PERSON.id;
+  console.log(saveData["PLOT_ARMOR_PERSON_ID"]);
+  return saveData;
 }
 
-function dubDynamax(DYNAMAX_PERSON) {
-  if (!Array.isArray(saveData["DYNAMAX_PEOPLE_ID"])) {
+function dubDynamax(saveData, DYNAMAX_PERSON) {
+    console.log(DYNAMAX_PERSON);
+    // Ensure saveData["DYNAMAX_PEOPLE_ID"] is initialized as an array
+    if (!Array.isArray(saveData["DYNAMAX_PEOPLE_ID"])) {
       saveData["DYNAMAX_PEOPLE_ID"] = [];
+    }
+    saveData["DYNAMAX_PEOPLE_ID"].push(DYNAMAX_PERSON.id);
+    console.log(saveData["DYNAMAX_PEOPLE_ID"]);
+    return saveData;
   }
-  if (!saveData["DYNAMAX_PEOPLE_ID"].includes(DYNAMAX_PERSON.id)) {
-      saveData["DYNAMAX_PEOPLE_ID"].push(DYNAMAX_PERSON.id);
-  }
+  
+
+function dubVerminWhisperer(saveData, VERMIN_WHISPERER_PERSON){
+  saveData["VERMIN_WHISPERER_PERSON_ID"] = VERMIN_WHISPERER_PERSON.id;
+  console.log(saveData["VERMIN_WHISPERER_PERSON_ID"]);
+  return saveData;
 }
 
-function dubVerminWhisperer(VERMIN_WHISPERER_PERSON){
-  saveData["VERMIN_WHISPERER_PERSON_ID"] = VERMIN_WHISPERER_PERSON.id
-}
-
-function dubSwiper(SWIPER_PERSON) {
-  if (!Array.isArray(saveData["SWIPER_PEOPLE_ID"])) {
-      saveData["SWIPER_PEOPLE_ID"] = [];
+function dubSwiper(saveData, SWIPER_PERSON) {
+  // Ensure saveData["DYNAMAX_PEOPLE_ID"] is initialized as an array
+  if (!Array.isArray(saveData["DYNAMAX_PEOPLE_ID"])) {
+    saveData["DYNAMAX_PEOPLE_ID"] = [];
   }
-  if (!saveData["SWIPER_PEOPLE_ID"].includes(SWIPER_PERSON.id)) {
-      saveData["SWIPER_PEOPLE_ID"].push(SWIPER_PERSON.id);
-  }
+  saveData["SWIPER_PEOPLE_ID"].push(SWIPER_PERSON.id);
+  console.log(saveData["SWIPER_PEOPLE_ID"]);
+  return saveData;
 }
 
-function dubBounty(BOUNTY_PERSON){
-  saveData["BOUNTY_PERSON_ID"] = BOUNTY_PERSON.id
+function dubBounty(saveData, BOUNTY_PERSON){
+  saveData["BOUNTY_PERSON_ID"] = BOUNTY_PERSON.id;
+  console.log(saveData["BOUNTY_PERSON_ID"]);
+  return saveData;
 }
 
-async function msgPerkUpdate() {
-  try {
+async function perkUpdate() {
+    try {
       const pokemon_channel = await client.channels.fetch(process.env.POKEMON_CHANNEL_ID);
-
+  
       if (!pokemon_channel) {
-          console.error("Pokemon channel not found.");
-          return;
+        console.error("Pokemon channel not found.");
+        return;
       }
-
+  
       saveData = load(saveData);
-
-      // Get the top 10 users by overall points
-      const topUsersByPoints = Object.values(saveData)
-          .filter(user => user["wants-to-play"])
-          .sort((a, b) => b["points"] - a["points"])
-          .slice(0, 10);
-      // Send the overall leaderboard
-      await pokemon_channel.send("Here is the overall TOTAL point leaderboard update!:\n" + 
-          topUsersByPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["points"]}`).join('\n')
-      );
-
-      // Get the top 10 users by barnaby points
-      const topUsersByBarnabyPoints = Object.values(saveData)
-          .filter(user => user["wants-to-play"])
-          .sort((a, b) => b["barnaby_points"] - a["barnaby_points"])  // Sort by barnaby points
-          .slice(0, 10);
-      // Send the overall barnaby leaderboard
-      await pokemon_channel.send("Here is the overall BARNABY point leaderboard!:\n" + 
-        topUsersByBarnabyPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["barnaby_points"]}`).join('\n')
-      );
-
-      // Get the top 5 users by weekly points
-      const topUsersByWeeklyPoints = Object.values(saveData)
-          .filter(user => user["wants-to-play"])
-          .sort((a, b) => b["weekly_points"] - a["weekly_points"])  // Sort by weekly points
-          .slice(0, 5);
-      // Send the weekly leaderboard
-      await pokemon_channel.send("Here is last week\'s overall point leaderboard!:\n" + 
-          topUsersByWeeklyPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["weekly_points"]}`).join('\n')
-      );
-      // Award Plot Armor to the top weekly user
+  
+      // Filter and validate user objects
+      const users = Object.values(saveData)
+        .filter(user => user && typeof user === 'object' && user["wants-to-play"]);
+  
+      if (users.length === 0) {
+        await pokemon_channel.send("No users found");
+        return;
+      }
+  
+      // Get the top users for various categories
+      const topUsersByPoints = users.sort((a, b) => b["points"] - a["points"]).slice(0, 10);
+      const topUsersByBarnabyPoints = users.sort((a, b) => b["barnaby_points"] - a["barnaby_points"]).slice(0, 10);
+      const topUsersByWeeklyPoints = users.sort((a, b) => b["weekly_points"] - a["weekly_points"]).slice(0, 5);
+      const topUsersByWeeklyBarnabyPoints = users.sort((a, b) => b["weekly_barnaby_points"] - a["weekly_barnaby_points"]).slice(0, 5);
+      const topUsersByRarity = users.map(user => ({ ...user, rarity: user["rarity"] || 0 })).sort((a, b) => b["rarity"] - a["rarity"]).slice(0, 5);
+  
+      // Initialize a string to accumulate the message content
+      let messageContent = "";
+  
+      // Append leaderboard messages
+      messageContent += "Here is the overall TOTAL point leaderboard update!:\n" +
+        topUsersByPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["points"]}`).join('\n') + "\n\n";
+      
+      messageContent += "Here is the overall BARNABY point leaderboard!:\n" +
+        topUsersByBarnabyPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["barnaby_points"]}`).join('\n') + "\n\n";
+      
+      messageContent += "Here is last week's overall point leaderboard!:\n" +
+        topUsersByWeeklyPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["weekly_points"]}`).join('\n') + "\n\n";
+      
+      messageContent += "Here is last week's BARNABY point leaderboard!:\n" +
+        topUsersByWeeklyBarnabyPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["weekly_barnaby_points"]}`).join('\n') + "\n\n";
+      
+      messageContent += "Here is last week's RARITY leaderboard!:\n" +
+        topUsersByRarity.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["rarity"]}`).join('\n') + "\n\n";
+  
+      // Plot Armor
       const topWeeklyUser = topUsersByWeeklyPoints[0];
       if (topWeeklyUser) {
-          await pokemon_channel.send(`🎉 Last week\'s winner is **${topWeeklyUser["username"]}** with ${topWeeklyUser["weekly_points"]} points, earning the PLOT ARMOR perk! 🎉`);
-          dubPlotArmor(topWeeklyUser);
+        saveData = dubPlotArmor(saveData, topWeeklyUser);
+        messageContent += `Winner of the **PLOT ARMOR** perk: *${topWeeklyUser["username"]}*\n\n`;
       }
-      // Award Dynamax perk to the top 3 weekly users
+  
+      // Dynamax
+      messageContent += "Winners of the **DYNAMAX** perk:\n";
       topUsersByWeeklyPoints.slice(0, 3).forEach((user, index) => {
-        dubDynamax(user);
-        pokemon_channel.send(`🎉 ${user["username"]} was in position ${index + 1} and has been awarded the DYNAMAX perk! 🎉`);
+        console.log("USER: " + user)
+        saveData = dubDynamax(saveData, user);
+        messageContent += `${index + 1}. ${user["username"]}\n`;
       });
-
-      // Get the top 5 users by weekly barnaby points
-      const topUsersByWeeklyBarnabyPoints = Object.values(saveData)
-          .filter(user => user["wants-to-play"])
-          .sort((a, b) => b["weekly_barnaby_points"] - a["weekly_barnaby_points"])  // Sort by weekly barnaby points
-          .slice(0, 5);
-      // Send the weekly barnaby leaderboard
-      await pokemon_channel.send("Here is last week\'s BARNABY point leaderboard!:\n" + 
-        topUsersByWeeklyBarnabyPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["weekly_barnaby_points"]}`).join('\n')
-      );
-      // Award Vermin Whisperer to the top weekly barnaby user 
+      messageContent += "\n";
+  
+      // Vermin Whisperer
       const topWeeklyBarnabyUser = topUsersByWeeklyBarnabyPoints[0];
-      if (topWeeklyBarnabyUser){
-        await pokemon_channel.send(`🎉 Last week\'s BARNABY winner is **${topWeeklyBarnabyUser["username"]}** with ${topWeeklyBarnabyUser["weekly_barnaby_points"]} points earned by catching BARNABYS, earning the VERMIN WHISPERER perk! 🎉`);
-        dubVerminWhisperer(topWeeklyBarnabyUser);
+      if (topWeeklyBarnabyUser) {
+        saveData = dubVerminWhisperer(saveData, topWeeklyBarnabyUser);
+        messageContent += `Winner of the **VERMIN WHISPERER** perk: *${topWeeklyBarnabyUser["username"]}*\n\n`;
       }
-      // Award Swiper perk to the top 3 weekly barnaby users
+
+  
+      // Swiper
+      messageContent += "Winners of the **SWIPER** perk:\n";
       topUsersByWeeklyBarnabyPoints.slice(0, 3).forEach((user, index) => {
-        dubSwiper(user);
-        pokemon_channel.send(`🎉 ${user["username"]} was in position ${index + 1} on last week\'s BARNABY leaderboard and has been awarded the SWIPER perk! 🎉`);
+        saveData = dubSwiper(saveData, user);
+        messageContent += `${index + 1}. ${user["username"]}\n`;
       });
-
-      // Get the top 5 users by rarity
-      const topUsersByRarity = Object.values(saveData)
-          .filter(user => user["wants-to-play"])
-          .map(user => user["rarity"] || 0)
-          .slice(0, 5);
-      // Send the rarity leaderboard
-      await pokemon_channel.send("Here is last week's RARITY leaderboard!:\n" + 
-        topUsersByRarity.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["rarity"] || 0}`).join('\n')
-      );
-      // Award BOUNTY perk to the player with the highest rarity value (in the case of a tie, choose randomly amongst tied players)
-      const topRarityValue = Math.max(...Object.values(saveData)
-          .filter(user => user["wants-to-play"])
-          .map(user => user["rarity"] || 0)
-      );
-      const tiedUsers = Object.values(saveData)
-          .filter(user => user["wants-to-play"] && user["rarity"] === topRarityValue);
+      messageContent += "\n";
+  
+      // Bounty
+      const topRarityValues = users.map(user => user["rarity"] || 0);
+      let topRarityValue = Math.max(topRarityValues);
+      const tiedUsers = users.filter(user => user["rarity"] === topRarityValue);
       if (tiedUsers.length > 0) {
-          const bountyWinner = tiedUsers[Math.floor(Math.random() * tiedUsers.length)];
-          await pokemon_channel.send(`🎉 **${bountyWinner["username"]}** was among those with the highest rarity value last week (${topRarityValue}) and has been awarded the BOUNTY perk! 🎉`);
-          dubBounty(bountyWinner);
+        const bountyWinner = tiedUsers[Math.floor(Math.random() * tiedUsers.length)];
+        saveData = dubBounty(saveData, bountyWinner);
+        messageContent += `Winner of the **BOUNTY** perk: *${bountyWinner["username"]}*\n\n`;
       }
-
-      // Clear all players' weekly points
-      Object.values(saveData)
-          .filter(user => user["wants-to-play"])
-          .forEach(user => {
-              user["weekly_points"] = 0;
-              user["weekly_barnaby_points"] = 0;
-          });
-      
-      save();
-
+  
+      // Clear weekly points and cooldowns
+      users.forEach(user => {
+        user["weekly_points"] = 0;
+        user["weekly_barnaby_points"] = 0;
+      });
+      saveData["catchCooldowns"] = {};
+  
+      // Save all updates
+      save(saveData);
+  
+      // Send the accumulated message content as a single message
+      sendLongMessage(pokemon_channel, messageContent);
+  
       console.log("Weekly points have been cleared for all players.");
-
-  } catch (error) {
+  
+    } catch (error) {
       console.error("An error occurred during the tournament update:", error);
+    }
   }
-}
+  
+  
+  
 
 // Export all the functions needed
 module.exports = {
+    express,
+    app,
+    fs,
+    cron,
+    openai,
+    discord,
+    client,
+    saveData,
     cmd,
     askAI,
     adjustPoints,
@@ -512,5 +559,5 @@ module.exports = {
     handleSpecialPerks,
     isCatchAllowed,
     setCatchCooldown,
-    msgPerkUpdate
+    perkUpdate
 };

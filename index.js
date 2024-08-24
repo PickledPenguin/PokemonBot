@@ -9,15 +9,15 @@ const POSSIBLE_PERKS = {
 //const ALLOWED_CHANNELS=["1065049126871515176", "1065064038427541594", "1053540259717189714"]
 const ALLOWED_CHANNELS=["1065064038427541594", "1053540259717189714"]
 
-
-const express = require('express')
-const app = express()
-const fs = require('fs')
-var cron = require('node-cron')
-require("dotenv").config()
-
 // imports all the util functions we need
-var {
+const {
+  express,
+  app,
+  fs,
+  cron,
+  openai,
+  discord,
+  client,
   cmd,
   askAI,
   adjustPoints,
@@ -32,16 +32,11 @@ var {
   handleSpecialPerks,
   isCatchAllowed,
   setCatchCooldown,
-  msgPerkUpdate,
+  perkUpdate,
 } = require('./util');
 
 // imports all the long typed messages
-var written_messages = require('./written-messages')
-
-const { OpenAI } = require("openai");
-const openai = new OpenAI({
-    apiKey: process.env.OPEN_AI_TOKEN,
-});
+const written_messages = require('./written-messages')
 
 var saveData;
 global.saveData = load(saveData);
@@ -52,18 +47,6 @@ app.get('/', (req, res) => {
 
 app.listen(3000, () => { console.log("Ready!") })
 
-const discord = require('discord.js')
-const { Client, GatewayIntentBits } = require('discord.js');
-
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildPresences,
-  ]
-});
-
 client.on('ready', () => { 
     console.log("Bot is ready");
 })
@@ -72,7 +55,7 @@ client.on('ready', () => {
 cron.schedule('00 00 * * *', increaseRarity, {timezone: "America/New_York"});
 
 // starts the weekly summary and perk updates
-cron.schedule('0 12 * * 0', msgPerkUpdate, { timezone: "America/New_York" });
+cron.schedule('0 12 * * 0', perkUpdate, { timezone: "America/New_York" });
 
 
 
@@ -113,7 +96,7 @@ client.on('messageCreate', async msg => {
 
     msg.channel.send("Changed personality from **" + prev_personality + "** to **" + personality + "**");
 
-    save();
+    save(saveData);
   }
 
   else if (cmd(msg, 'register')){
@@ -138,7 +121,7 @@ client.on('messageCreate', async msg => {
 
         // Get the status person's data
         console.log(statusPerson.id);
-        console.log(saveData[statusPerson.id])
+        console.log(saveData[statusPerson.id].id);
         userData = saveData[statusPerson.id];
         console.log(userData);
 
@@ -147,14 +130,21 @@ client.on('messageCreate', async msg => {
         } else {
     
           let pokedex = "{\n";
-          for (let pokemon of Object.values(saveData[statusPerson.id]["pokedex"])) {
+          for (let pokemon of Object.keys(saveData[statusPerson.id]["pokedex"])) {
             pokedex += "\t" + pokemon + ": " + userData["pokedex"][pokemon] + "\n";
           }
           pokedex += "}";
 
           let perks_list = "{\n";
           for (const [perkId, perkName] of Object.entries(POSSIBLE_PERKS)) {
-              if (userData[perkId] && userData[perkId] === userId) {
+              console.log("perkID: " + perkId);
+              console.log("perkName: " + perkName);
+              console.log(saveData[perkId]);
+              console.log(statusPerson.id);
+              console.log(saveData[statusPerson.id].id);
+
+              if (saveData[perkId] && saveData[perkId] == saveData[statusPerson.id].id) {
+                console.log("added " + perkName);
                 perks_list += `\t${perkName}\n`;
               }
           }
@@ -184,14 +174,14 @@ client.on('messageCreate', async msg => {
     setupDefaultsIfNecessary(msg.author);
     saveData[msg.author.id]["wants-to-play"] = false;
     msg.channel.send("Successfully opted out for playing the game. Any catch messages that mention you will be deleted")
-    save();
+    save(saveData);
   }
 
   else if (cmd(msg, 'opt-in')){
     setupDefaultsIfNecessary(msg.author);
     saveData[msg.author.id]["wants-to-play"] = true;
     msg.channel.send("Successfully opted in to playing the game. Happy hunting :grin:");
-    save();
+    save(saveData);
   }
 
   else if (cmd(msg, 'off-limits')){
@@ -208,64 +198,57 @@ client.on('messageCreate', async msg => {
   else if (cmd(msg, 'catch')) {
 
     if (checkOffLimits(msg)) {
-        return;
+      return;
     }
 
     users_mentioned = msg.mentions.users.size;
-    msg.mentions.users.forEach(CaughtPerson => {
-        let caughtPerson = CaughtPerson[1];
-        
-        const catchCheck = isCatchAllowed(msg.author.id, caughtPerson.id);
+    msg.mentions.users.forEach(caughtPersonID => {
+        caughtPersonID = "" + caughtPersonID;
+        let caughtPersonUsername = saveData[caughtPersonID]["username"];
 
-        if (!catchCheck.allowed) {
-            msg.channel.send(`Catches between you and ${caughtPerson} are still on cooldown for ${catchCheck.remainingTime} minute(s).`);
-            return;
-        }
+        const catchCheck = isCatchAllowed(msg.author.id, caughtPersonID);
+          if (!catchCheck.allowed) {
+              msg.channel.send(`Catches between you and ${caughtPersonUsername} are still on cooldown for ${catchCheck.remainingTime} minute(s).`);
+              return;
+          }
 
-        if (msg.author.id === caughtPerson.id) {
+        if (msg.author.id === caughtPersonID) {
             askAI("A user has tried to 'catch' themselves. Ridicule them for attempting such a ridiculous thing.", msg.author.id)
                 .then(response => sendLongMessage(msg.channel,response));
-        } else if (caughtPerson.id === process.env.BOT) {
-            askAI("A user has tried to 'catch' YOU and was obviously unsuccessful! Ridicule them for attempting such a ridiculous thing.", msg.author.id)
-                .then(response => sendLongMessage(msg.channel,response));
         } else {
-            setupDefaultsIfNecessary(msg.author);
-            setupDefaultsIfNecessary(caughtPerson);
+          const currentGuild = client.guilds.cache.get(process.env.GUILD_ID);
+          currentGuild.members.fetch(caughtPersonID).then(person => {
 
-            const currentGuild = client.guilds.cache.get(process.env.GUILD_ID);
-            currentGuild.members.fetch(caughtPerson.id).then(person => {
+              let multiplier = handleSpecialPerks(msg, msg.author.id, caughtPersonID);
 
-                let multiplier = handleSpecialPerks(msg, msg.author, caughtPerson);
+              if (person.roles.cache.some(role => role.name === "Shiny")) {
+                  awardPointsAndSendMessage(msg, msg.author.id, caughtPersonID, "Shiny", 10, multiplier);
+              } else if (person.roles.cache.some(role => role.name === "Rare")) {
+                  awardPointsAndSendMessage(msg, msg.author.id, caughtPersonID, "Rare", 5, multiplier);
+              } else if (person.roles.cache.some(role => role.name === "Uncommon")) {
+                  awardPointsAndSendMessage(msg, msg.author.id, caughtPersonID, "Uncommon", 3, multiplier);
+              } else {
+                  awardPointsAndSendMessage(msg, msg.author.id, caughtPersonID, "Normal", 1, multiplier);
+              }
 
-                if (multiplier == null) {
-                    askAI("A user has tried to 'catch' another user, but was unsuccessful because of the other user's special PLOT ARMOR feature.", msg.author.id)
-                    .then(response => sendLongMessage(msg.channel,response));
-                } else {
-                    if (person.roles.cache.some(role => role.name === "Shiny")) {
-                        awardPointsAndSendMessage(msg, msg.author, caughtPerson, "Shiny", 10, multiplier);
-                    } else if (person.roles.cache.some(role => role.name === "Rare")) {
-                        awardPointsAndSendMessage(msg, msg.author, caughtPerson, "Rare", 5, multiplier);
-                    } else if (person.roles.cache.some(role => role.name === "Uncommon")) {
-                        awardPointsAndSendMessage(msg, msg.author, caughtPerson, "Uncommon", 3, multiplier);
-                    } else {
-                        awardPointsAndSendMessage(msg, msg.author, caughtPerson, "Normal", 1, multiplier);
-                    }
+              const pokemonEntry = `${saveData["SEASON_EMOJI"]} ${caughtPersonUsername} ${saveData["SEASON_EMOJI"]}`;
 
-                    const seasonKey = caughtPerson.id + saveData["SEASON_ID"];
-                    const pokemonEntry = `${saveData["SEASON_EMOJI"]} ${caughtPerson.username} ${saveData["SEASON_EMOJI"]}`;
+              console.log("pokemonEntry: " + pokemonEntry);
 
-                    // Increment the Pokedex entry (first initialize if necessary)
-                    saveData[msg.author.id]["pokedex"][seasonKey] = saveData[msg.author.id]["pokedex"][seasonKey] || {};
-                    saveData[msg.author.id]["pokedex"][seasonKey][pokemonEntry] = (saveData[msg.author.id]["pokedex"][seasonKey][pokemonEntry] || 0) + 1;
+              // Increment the Pokedex entry (first initialize if necessary)
+              saveData[msg.author.id]["pokedex"][pokemonEntry] = saveData[msg.author.id]["pokedex"][pokemonEntry] || 0
+              console.log(saveData[msg.author.id]["pokedex"][pokemonEntry]);
+              saveData[msg.author.id]["pokedex"][pokemonEntry] += 1;
+              console.log(saveData[msg.author.id]["pokedex"][pokemonEntry]);
+              console.log(saveData[msg.author.id]["pokedex"]);
 
-                    // Reset the rarity value of the caught person
-                    saveData[caughtPerson.id]["rarityValue"] = 0;
+              // Reset the rarity value of the caught person
+              saveData[caughtPersonID]["rarityValue"] = 0;
 
-                    // Set the cooldown after a successful catch
-                    setCatchCooldown(msg.author.id, caughtPerson.id);
-                }
+              // Set the cooldown after a successful catch
+              setCatchCooldown(msg.author.id, caughtPersonID);
 
-                save();
+              save(saveData);
 
             }).catch(console.error);
         }
@@ -342,7 +325,7 @@ client.on('messageCreate', async msg => {
         saveData["SEASON_ID"] = seasons[nextSeasonIndex];
         saveData["SEASON_EMOJI"] = emojis[nextSeasonIndex];
 
-        save();
+        save(saveData);
 
         msg.channel.send(`Welcome to the next season! The season ID is: ${saveData["SEASON_ID"]} and the season emoji is: ${saveData["SEASON_EMOJI"]}`);
     } else {
@@ -350,8 +333,20 @@ client.on('messageCreate', async msg => {
     }
   }
 
-  else if (msg.content.toLowerCase().includes("!trigger-rarity-increase")){
-    increaseRarity();
+  else if (cmd(msg, 'trigger-rarity-increase')){
+    if (msg.member.roles.cache.some(role => role.name === 'PokemonBotManager') || msg.author.id === process.env.AUTHOR_ID) {
+      increaseRarity();
+    } else {
+      msg.channel.send("You are not a PokemonBotManager :eyes:");
+    }
+  }
+
+  else if (cmd(msg, 'trigger-perk-update')){
+    if (msg.member.roles.cache.some(role => role.name === 'PokemonBotManager') || msg.author.id === process.env.AUTHOR_ID) {
+      perkUpdate();
+    } else {
+      msg.channel.send("You are not a PokemonBotManager :eyes:");
+    }
   }
 
 })

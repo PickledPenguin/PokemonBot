@@ -38,6 +38,8 @@ Here are the current commands:
 **!set-rarity [@person] [amount]**   (Sets the rarity value of the person mentioned to [amount])
 **!next-season**   (Advances the game onto the next season. The seasons run in this order: FALL, WINTER, SPRING, SUMMER)
 **!trigger-rarity-increase**   (Triggers an increase in EVERYONE'S rarity, and assigns appropriate roles based on rarity value. This command automatically runs at midnight every day)
+**!trigger-perk-update**   (Triggers the perk update. This command automatically runs at noon at the start of every week)
+
 `;
 
 const HELP_PERKS = 
