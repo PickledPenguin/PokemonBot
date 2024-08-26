@@ -153,14 +153,22 @@ function increaseRarity(){
 
 // function to split up messages to send separately, to avoid issues with discord's limit of 2000 characters.
 function splitMessage(str, size) {
-    const numChunks = Math.ceil(str.length / size)
-    const chunks = new Array(numChunks)
+    // Ensure size is a valid number and greater than 0
+    console.log(`splitMessage called with string of length: ${str.length} and size: ${size}`);
+
+    if (typeof size !== 'number' || size <= 0) {
+        throw new RangeError('Invalid size for splitMessage: size must be a positive number.');
+    }
+
+    const numChunks = Math.ceil(str.length / size);
+    const chunks = new Array(numChunks);
 
     for (let i = 0, c = 0; i < numChunks; ++i, c += size) {
-        chunks[i] = str.substr(c, size)
+        chunks[i] = str.substr(c, size);
     }
     return chunks;
 }
+
 
 // Function to send a long message in chunks
 function sendLongMessage(channel, message) {
