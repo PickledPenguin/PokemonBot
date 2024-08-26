@@ -56,17 +56,17 @@ async function adjustPoints(saveData, msg, user, amount, pointSign, pointPrefix)
     }
 
     if (saveData[user.id] === undefined) {
-        setupDefaultsIfNecessary(saveData, user.id, user.username);
+        setupDefaultsIfNecessary(saveData, user.id, user.globalName);
     }
 
     if (pointSign == "+") {
         saveData[user.id][pointPrefix + "points"] = saveData[user.id][pointPrefix + "points"] + amount;
         save(saveData);
-        return `Added ${amount} points to ${user.username}'s "${pointPrefix}points" for a total of ${saveData[user.id][pointPrefix + "points"]}.`;
+        return `Added ${amount} points to ${user.globalName}'s "${pointPrefix}points" for a total of ${saveData[user.id][pointPrefix + "points"]}.`;
     } else {
         saveData[user.id][pointPrefix + "points"] = saveData[user.id][pointPrefix + "points"] - amount;
         save(saveData);
-        return `Subtracted ${amount} points from ${user.username}'s "${pointPrefix}points" for a total of ${saveData[user.id][pointPrefix + "points"]}`;
+        return `Subtracted ${amount} points from ${user.globalName}'s "${pointPrefix}points" for a total of ${saveData[user.id][pointPrefix + "points"]}`;
     }
 }
 
@@ -84,13 +84,13 @@ function setRarity(msg, setRarityPerson, amount) {
     }
 
     // unnecessary but I'm keeping it here in case
-    setupDefaultsIfNecessary(saveData, setRarityPerson.id, setRarityPerson.username);
+    setupDefaultsIfNecessary(saveData, setRarityPerson.id, setRarityPerson.globalName);
 
     if (saveData["" + setRarityPerson.id]["rarityValue"] === 0 && amount < 0) {
-        msg.channel.send(`${setRarityPerson.username}'s rarity value is already at the minimum value of 0.`);
+        msg.channel.send(`${setRarityPerson.globalName}'s rarity value is already at the minimum value of 0.`);
     } else {
         saveData["" + setRarityPerson.id]["rarityValue"] = amount;
-        msg.channel.send(`Set ${setRarityPerson.username}'s rarity value to ${amount}`);
+        msg.channel.send(`Set ${setRarityPerson.globalName}'s rarity value to ${amount}`);
         save(saveData);
     }
 }
@@ -181,10 +181,6 @@ function sendLongMessage(channel, message) {
 }
 
 function setupDefaultsIfNecessary(saveData, userID, userUsername){
-    console.log(userID);
-    console.log(saveData[userID]);
-    console.log(saveData[userID] === undefined);
-
     try{
         if (saveData[userID] === undefined) {
             saveData[userID] = {"id": userID, "points": 0, "weekly_points": 0,"barnaby_points": 0,"weekly_barnaby_points": 0,"username":userUsername,"pokedex":{},"wants-to-play":true,"rarityValue":0,"AIPersonality":"Pokemon Announcer"};

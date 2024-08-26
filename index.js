@@ -111,7 +111,7 @@ client.on('messageCreate', async msg => {
   }
 
   else if (cmd(msg, 'register')){
-    if(setupDefaultsIfNecessary(saveData, msg.author.id, msg.author.username)){
+    if(setupDefaultsIfNecessary(saveData, msg.author.id, msg.author.globalName)){
       msg.channel.send("Successfully registered :thumbsup:");
     } else {
       msg.channel.send("You are already registered :thumbsup:");
@@ -137,7 +137,7 @@ client.on('messageCreate', async msg => {
       userData = saveData[statusPerson.id];
 
       if (!userData) {
-          msg.channel.send("@" + statusPerson.username + " has no available data");
+          msg.channel.send("@" + statusPerson.globalName + " has no available data");
       } else {
   
         let pokedex = "{\n";
@@ -161,7 +161,7 @@ client.on('messageCreate', async msg => {
         
         msg.channel.send(
 `
-**@${statusPerson.username}'s Status**:
+**@${statusPerson.globalName}'s Status**:
 *Overall points:* ${saveData[statusPerson.id]["points"] || 0}
 *Weekly points:* ${saveData[statusPerson.id]["weekly_points"] || 0}
 *Overall BARNABY points:* ${saveData[statusPerson.id]["barnaby_points"] || 0}
@@ -172,19 +172,19 @@ client.on('messageCreate', async msg => {
         );
       }
     } catch (e) {
-      msg.channel.send("No status found for @" + statusPerson.username);
+      msg.channel.send("No status found for @" + statusPerson.globalName);
     }
   }
 
   else if (cmd(msg, 'opt-out')){
-    setupDefaultsIfNecessary(saveData, msg.author.id, msg.author.username);
+    setupDefaultsIfNecessary(saveData, msg.author.id, msg.author.globalName);
     saveData[msg.author.id]["wants-to-play"] = false;
     msg.channel.send("Successfully opted out for playing the game. Any catch messages that mention you will be deleted")
     save(saveData);
   }
 
   else if (cmd(msg, 'opt-in')){
-    setupDefaultsIfNecessary(saveData, msg.author.id, msg.author.username);
+    setupDefaultsIfNecessary(saveData, msg.author.id, msg.author.globalName);
     saveData[msg.author.id]["wants-to-play"] = true;
     msg.channel.send("Successfully opted in to playing the game. Happy hunting :grin:");
     save(saveData);
@@ -343,7 +343,7 @@ msg.channel.send(result);
     if (!getRarityPerson) {
       getRarityPerson = msg.author;
     }
-    msg.channel.send(`${getRarityPerson.username} has a rarity value of ${saveData["" + getRarityPerson.id]["rarityValue"]}`);
+    msg.channel.send(`${getRarityPerson.globalName} has a rarity value of ${saveData["" + getRarityPerson.id]["rarityValue"]}`);
   }
 
   else if (cmd(msg, 'set-rarity')) {
