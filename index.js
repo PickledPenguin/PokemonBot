@@ -172,8 +172,6 @@ client.on('messageCreate', async msg => {
         );
       }
     } catch (e) {
-      // if no status found for author
-      console.log(e);
       msg.channel.send("No status found for @" + statusPerson.username);
     }
   }

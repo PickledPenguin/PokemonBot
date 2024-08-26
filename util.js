@@ -30,23 +30,18 @@ function cmd(msg, command_string){
 }
 
 async function askAI(prompt, author_id){
-    console.log("prompt:\n" + prompt)
-    console.log(author_id)
     const response = await openai.chat.completions.create({
         messages: [{role: "system", content: "You are an announcer in an online Pokemon-like game where several users attempt to \"catch\" various Pokemon and obtain points based on the rarity value of the Pokemon they catch, as well as add those Pokemon to their \"Pokedex\". Keep all following answers to a very short, concise paragraph. You personality should be: " + saveData[author_id]["AIPersonality"] + ". Make sure to answer all following prompts heavily flavored with your personality"}, 
         { role: "user", content: prompt }],
         model: "gpt-3.5-turbo",
       });
-    console.log(response.choices[0].message.content);
     return response.choices[0].message.content;
 }
 
 async function adjustPoints(saveData, msg, user, amount, pointSign, pointPrefix) {
-    if (!(msg.member.roles.cache.some(role => role.name === 'PokemonBotManager') || msg.author.id === process.env.AUTHOR_ID)) {
+    if (!(msg.member.roles.cache.some(role => role.name === 'PokemonBotManager') || "" + msg.author.id === process.env.AUTHOR_ID)) {
         return "You are not a PokémonBotManager :eyes:";
     }
-
-    console.log(pointSign + " " + amount + " " + pointPrefix + "points");
 
     if (checkOffLimits(msg)) {
         return;
@@ -76,7 +71,7 @@ async function adjustPoints(saveData, msg, user, amount, pointSign, pointPrefix)
 }
 
 function setRarity(msg, setRarityPerson, amount) {
-    if (!msg.member.roles.cache.some(role => role.name === 'PokemonBotManager') && msg.author.id !== process.env.AUTHOR_ID) {
+    if (!msg.member.roles.cache.some(role => role.name === 'PokemonBotManager') && "" + msg.author.id !== process.env.AUTHOR_ID) {
         return msg.channel.send("You are not a PokemonBotManager :eyes:");
     }
 
@@ -194,9 +189,7 @@ function checkOffLimits(msg){
     let isOffLimits = false;
     for (let Person of msg.mentions.users) {
         let person = Person[1];
-        console.log(person)
-        if (!saveData[person.id] || saveData[person.id]["wants-to-play"] == false){
-            console.log(saveData[person.id]);
+        if (!saveData["" + person.id] || saveData["" + person.id]["wants-to-play"] == false){
             isOffLimits = true;
             break;
         }
@@ -409,26 +402,21 @@ function setCatchCooldown(saveData, catcherId, caughtId) {
 }
 
 function dubPlotArmor(saveData, PLOT_ARMOR_PERSON){
-  console.log(PLOT_ARMOR_PERSON);
   saveData["PLOT_ARMOR_PERSON_ID"] = "" + PLOT_ARMOR_PERSON.id;
-  console.log(saveData["PLOT_ARMOR_PERSON_ID"]);
   return saveData;
 }
 
 function dubDynamax(saveData, DYNAMAX_PERSON) {
-    console.log(DYNAMAX_PERSON);
     // Ensure saveData["DYNAMAX_PEOPLE_ID"] is initialized as an array
     if (!Array.isArray(saveData["DYNAMAX_PEOPLE_ID"])) {
       saveData["DYNAMAX_PEOPLE_ID"] = [];
     }
     saveData["DYNAMAX_PEOPLE_ID"].push("" + DYNAMAX_PERSON.id);
-    console.log(saveData["DYNAMAX_PEOPLE_ID"]);
     return saveData;
 }
 
 function dubVerminWhisperer(saveData, VERMIN_WHISPERER_PERSON){
   saveData["VERMIN_WHISPERER_PERSON_ID"] = "" + VERMIN_WHISPERER_PERSON.id;
-  console.log(saveData["VERMIN_WHISPERER_PERSON_ID"]);
   return saveData;
 }
 
@@ -438,13 +426,11 @@ function dubSwiper(saveData, SWIPER_PERSON) {
     saveData["SWIPER_PEOPLE_ID"] = [];
   }
   saveData["SWIPER_PEOPLE_ID"].push("" + SWIPER_PERSON.id);
-  console.log(saveData["SWIPER_PEOPLE_ID"]);
   return saveData;
 }
 
 function dubBounty(saveData, BOUNTY_PERSON){
   saveData["BOUNTY_PERSON_ID"] = "" + BOUNTY_PERSON.id;
-  console.log(saveData["BOUNTY_PERSON_ID"]);
   return saveData;
 }
 
@@ -505,7 +491,6 @@ async function perkUpdate() {
       // Dynamax
       messageContent += "Winners of the **DYNAMAX** perk:\n";
       topUsersByWeeklyPoints.slice(0, 3).forEach((user, index) => {
-        console.log("USER: " + user)
         saveData = dubDynamax(saveData, user);
         messageContent += `${index + 1}. *${user["username"]}*\n`;
       });
@@ -529,11 +514,8 @@ async function perkUpdate() {
   
       // Bounty
       const topRarityValueUsers = users.map(user => user["rarityValue"] || 0);
-      console.log("topRarityValueUsers: " + topRarityValueUsers);
       let topRarityValue = Math.max(...topRarityValueUsers);
-      console.log("topRarityValue: " + topRarityValue);
       const tiedUsers = users.filter(user => user["rarityValue"] === topRarityValue);
-      console.log("tied Users: " + tiedUsers);
       if (tiedUsers.length > 0) {
         const bountyWinner = tiedUsers[Math.floor(Math.random() * tiedUsers.length)];
         saveData = dubBounty(saveData, bountyWinner);
