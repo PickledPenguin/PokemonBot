@@ -26,7 +26,7 @@ var saveData;
 global.saveData = load();
 
 function cmd(msg, command_string){
-    return msg.content.toLowerCase().includes(command_string);
+    return msg.content.toLowerCase().includes("!" + command_string);
 }
 
 async function askAI(prompt, author_id){
