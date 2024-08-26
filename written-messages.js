@@ -2,9 +2,9 @@ const HELP_POKEMON = `
 Welcome to the Pokemon game! For a full list of all commands, type "!help-commands".
 (First time? Type "!register" to join the game.)
 
-Catch fellow players by posting a picture of them in the POKEMON channel and using "!catch" with their mention (@Username). If multiple players are in one picture, mention them all to catch everyone. Points are awarded based on the rarity of the person you catch. Everyone's rarity increases every day that they are not caught, earning roles like UNCOMMON, RARE, and SHINY.
+Catch fellow players by posting a picture of them in the POKEMON channel and using "!catch" with their mention (@Username). If multiple players are in one picture, mention them all to catch everyone. You will record the catches in your pokedex and earn points based on the rarity of the person you catch. Everyone's rarity increases every day that they are not caught, earning roles like UNCOMMON, RARE, and SHINY.
 
-You can also catch "Pokémon-like" animals (or statues) by using "!catch" with "@barnaby" as the mention. You can send up to ${process.env.BARNABY_ATTACHMENT_LIMIT} unique pictures per message and will recieve points for each one. No duplicate pictures are allowed!
+You can also catch "Pokémon-like" animals by using "!catch" with "@barnaby" as the mention. You can send up to ${process.env.BARNABY_ATTACHMENT_LIMIT} unique pictures per message and will recieve points for each one. No duplicate pictures are allowed!
 
 After a catch, both you and the person caught will be on a ${process.env.COOLDOWN_MINUTES}-minute cooldown, preventing further catches between you two during that time.
 
@@ -29,22 +29,36 @@ Here are the current commands:
 **!opt-in**   (Opts you back in for playing the game)
 **!off-limits**   (Displays everyone who has opted out of playing the game)
 **!set-personality [personality description]**   (Sets the personality of your custom AI catch messages to [personality description])
+**!help-admin**   (Displays all admin commands for only avaiable for those with the "PokemonBotManager" tag)
+`;
 
-*The following commands are only available to people with the "PokemonBotManager" tag:*
+const HELP_ADMIN = 
+`
+*The following commands are only available for people with the "PokemonBotManager" tag:*
 
 **!add-points [@person] [amount]**   (Adds [amount] points to the person mentioned)
-**!subtract-points [@person] [amount]**   (Subtracts [amount] point from the person mentioned)
+**!add-weekly-points [@person] [amount]**   (Adds [amount] weekly points to the person mentioned)
+**!add-barnaby-points [@person] [amount]**   (Adds [amount] barnaby points to the person mentioned)
+**!add-weekly-barnaby-points [@person] [amount]**   (Adds [amount] weekly barnaby points to the person mentioned)
+
+**!subtract-points [@person] [amount]**   (Subtracts [amount] points from the person mentioned)
+**!subtract-weekly-points [@person] [amount]**   (Subtracts [amount] weekly points from the person mentioned)
+**!subtract-barnaby-points [@person] [amount]**   (Subtracts [amount] barnaby points from the person mentioned)
+**!subtract-weekly-barnaby-points [@person] [amount]**   (Subtracts [amount] weekly barnaby points from the person mentioned)
+
 **!get-rarity [@person]**   (Displays the rarity value of the person mentioned)
 **!set-rarity [@person] [amount]**   (Sets the rarity value of the person mentioned to [amount])
-**!next-season**   (Advances the game onto the next season. The seasons run in this order: FALL, WINTER, SPRING, SUMMER)
-**!trigger-rarity-increase**   (Triggers an increase in EVERYONE'S rarity, and assigns appropriate roles based on rarity value. This command automatically runs at midnight every day)
-**!trigger-perk-update**   (Triggers the perk update. This command automatically runs at noon at the start of every week)
 
+**!next-season**   (Advances the game onto the next season. The seasons run in this order: FALL, WINTER, SPRING, SUMMER)
+
+**!trigger-rarity-increase**   (Triggers an increase in EVERYONE'S rarity, and assigns appropriate roles based on rarity value. This command automatically runs at midnight every day)
+
+**!trigger-perk-update**   (Triggers the perk assessment and update. This command automatically runs once a week on Sunday at noon)
 `;
 
 const HELP_PERKS = 
 `
-Here are the current perks and how to earn them! Perks are awarded at the start of each week.
+Here are the current perks and how to earn them! Perks are reassessed every week on Sunday at noon.
 All perk benefits stack.
 
 **PLOT ARMOR**: 
@@ -72,4 +86,4 @@ All perk benefits stack.
 - If you are caught, the points given to your catcher are doubled and the perk is removed
 `;
 
-module.exports = { HELP_POKEMON, HELP_COMMANDS, HELP_PERKS };
+module.exports = { HELP_POKEMON, HELP_COMMANDS, HELP_ADMIN, HELP_PERKS };

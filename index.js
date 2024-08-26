@@ -9,6 +9,7 @@ const POSSIBLE_PERKS = {
 //const ALLOWED_CHANNELS=["1065049126871515176", "1065064038427541594", "1053540259717189714"]
 const ALLOWED_CHANNELS=["1065064038427541594", "1053540259717189714"]
 
+const { stat } = require('fs');
 // imports all the util functions we need
 const {
   express,
@@ -31,7 +32,6 @@ const {
   awardPointsAndSendMessage,
   handleSpecialPerks,
   isCatchAllowed,
-  setCatchCooldown,
   perkUpdate,
 } = require('./util');
 
@@ -51,12 +51,11 @@ client.on('ready', () => {
     console.log("Bot is ready");
 })
 
-// starts the daily pokemon rarity updates
+// schedules the daily pokemon rarity updates
 cron.schedule('00 00 * * *', increaseRarity, {timezone: "America/New_York"});
 
-// starts the weekly summary and perk updates
+// schedules the weekly summary and perk updates
 cron.schedule('0 12 * * 0', perkUpdate, { timezone: "America/New_York" });
-
 
 
 client.on('messageCreate', async msg => {
@@ -66,6 +65,7 @@ client.on('messageCreate', async msg => {
     return;
   }
 
+  // critical, its janky yeah but pls don't remove it breaks stuff
   if (msg.content.startsWith('!')){
     saveData = load(saveData);
   }
@@ -82,11 +82,20 @@ client.on('messageCreate', async msg => {
     sendLongMessage(msg.channel, written_messages.HELP_PERKS);
   }
 
+  else if (cmd(msg, 'help-admin')){
+    sendLongMessage(msg.channel, written_messages.HELP_ADMIN);
+  }
+
   else if (cmd(msg, 'set-personality')){
     personality = msg.content.substring(16);
 
+    if (personality.length < 1){
+      msg.channel.send("Please provide a personality");
+      return;
+    }
+
     // Check if the personality length exceeds the maximum limit
-    if (personality.length > process.env.MAX_PERSONALITY_LENGTH) {
+    if (personality.length > Number(process.env.MAX_PERSONALITY_LENGTH)) {
       msg.channel.send(`The personality description is too long. Please limit it to ${process.env.MAX_PERSONALITY_LENGTH} characters.`);
       return;
     }
@@ -100,57 +109,55 @@ client.on('messageCreate', async msg => {
   }
 
   else if (cmd(msg, 'register')){
-    setupDefaultsIfNecessary(msg.author);
-    msg.channel.send("Successfully Registered :thumbsup:");
+    if(setupDefaultsIfNecessary(msg.author.id, msg.author.username)){
+      msg.channel.send("Successfully registered :thumbsup:");
+    } else {
+      msg.channel.send("You are already registered :thumbsup:");
+    }
   }
 
   else if (msg.content.toLowerCase().includes('!status')) {
 
-    const statusPerson = msg.mentions.users.first()
+    var statusPerson = msg.mentions.users.first()
 
-    if (checkOffLimits(msg)){
-      return;
+    if (!statusPerson) {
+      statusPerson = msg.author;
+    }
+    else{
+      if (checkOffLimits(msg)){
+        return;
+      }
     }
 
-    else if (!statusPerson) {
-      msg.channel.send("No user mentioned, please specify who\'s status you want to see");
-    }
-    else {
-      // try send status for author
-      try {
+    try {
 
-        // Get the status person's data
-        console.log(statusPerson.id);
-        console.log(saveData[statusPerson.id].id);
-        userData = saveData[statusPerson.id];
-        console.log(userData);
+      // Get the status person's data for ez access
+      userData = saveData[statusPerson.id];
 
-        if (!userData) {
-            msg.channel.send("@" + statusPerson.username + " has no available data");
-        } else {
-    
-          let pokedex = "{\n";
-          for (let pokemon of Object.keys(saveData[statusPerson.id]["pokedex"])) {
-            pokedex += "\t" + pokemon + ": " + userData["pokedex"][pokemon] + "\n";
-          }
-          pokedex += "}";
+      if (!userData) {
+          msg.channel.send("@" + statusPerson.username + " has no available data");
+      } else {
+  
+        let pokedex = "{\n";
+        for (let pokemon of Object.keys(saveData[statusPerson.id]["pokedex"])) {
+          pokedex += "\t" + pokemon + ": " + userData["pokedex"][pokemon] + "\n";
+        }
+        pokedex += "}";
 
-          let perks_list = "{\n";
-          for (const [perkId, perkName] of Object.entries(POSSIBLE_PERKS)) {
-              console.log("perkID: " + perkId);
-              console.log("perkName: " + perkName);
-              console.log(saveData[perkId]);
-              console.log(statusPerson.id);
-              console.log(saveData[statusPerson.id].id);
-
-              if (saveData[perkId] && saveData[perkId] == saveData[statusPerson.id].id) {
-                console.log("added " + perkName);
+        let perks_list = "{\n";
+        for (const [perkId, perkName] of Object.entries(POSSIBLE_PERKS)) {
+            if (saveData[perkId] && Array.isArray(saveData[perkId])){
+              if (saveData[perkId].includes("" + statusPerson.id)){
                 perks_list += `\t${perkName}\n`;
               }
-          }
-          perks_list += "}";
-          
-          msg.channel.send(
+            }
+            else if (saveData[perkId] == "" + statusPerson.id) {
+              perks_list += `\t${perkName}\n`;
+            }
+        }
+        perks_list += "}";
+        
+        msg.channel.send(
 `
 **@${statusPerson.username}'s Status**:
 *Overall points:* ${saveData[statusPerson.id]["points"] || 0}
@@ -160,13 +167,12 @@ client.on('messageCreate', async msg => {
 *Pokedex:* ${pokedex == "{\n}" ? "No Pokedex" : pokedex}
 *Perks:* ${perks_list == "{\n}" ? "No Perks" : perks_list}
 `
-          );
-        }
-      } catch (e) {
-        // if no status found for author
-        console.log(e);
-        msg.channel.send("No status found for @" + statusPerson.username);
+        );
       }
+    } catch (e) {
+      // if no status found for author
+      console.log(e);
+      msg.channel.send("No status found for @" + statusPerson.username);
     }
   }
 
@@ -185,14 +191,15 @@ client.on('messageCreate', async msg => {
   }
 
   else if (cmd(msg, 'off-limits')){
-    result = "Here are all the people who does NOT want to be involved in the game:\n\n"
-    for (let key of Object.keys(saveData)) {
-      if (!saveData[key]["wants-to-play"]){
-        result += "\t**" + saveData[key]["username"] + "**\n";
-      }
-    }
-    result += "\nAny \"!catch\" messages that mention these people will be deleted";
-    msg.channel.send(result);
+    const result = "Here are all the people who do NOT want to be involved in the game:\n\n" + 
+    Object.values(saveData)
+    .filter(user => user["wants-to-play"] != undefined && user["wants-to-play"] === false)
+    .map(user => `\t**${user["username"]}**`)
+    .join('\n') +
+  "\n\nAny \"!catch\" messages that mention these people will be deleted";
+
+msg.channel.send(result);
+
   }
 
   else if (cmd(msg, 'catch')) {
@@ -206,7 +213,7 @@ client.on('messageCreate', async msg => {
         caughtPersonID = "" + caughtPersonID;
         let caughtPersonUsername = saveData[caughtPersonID]["username"];
 
-        const catchCheck = isCatchAllowed(msg.author.id, caughtPersonID);
+        const catchCheck = isCatchAllowed(saveData, msg.author.id, caughtPersonID);
           if (!catchCheck.allowed) {
               msg.channel.send(`Catches between you and ${caughtPersonUsername} are still on cooldown for ${catchCheck.remainingTime} minute(s).`);
               return;
@@ -219,36 +226,17 @@ client.on('messageCreate', async msg => {
           const currentGuild = client.guilds.cache.get(process.env.GUILD_ID);
           currentGuild.members.fetch(caughtPersonID).then(person => {
 
-              let multiplier = handleSpecialPerks(msg, msg.author.id, caughtPersonID);
+              let multiplier = handleSpecialPerks(saveData, msg, msg.author.id, caughtPersonID);
 
               if (person.roles.cache.some(role => role.name === "Shiny")) {
-                  awardPointsAndSendMessage(msg, msg.author.id, caughtPersonID, "Shiny", 10, multiplier);
+                  awardPointsAndSendMessage(saveData, msg, msg.author.id, caughtPersonID, "Shiny", 10, multiplier);
               } else if (person.roles.cache.some(role => role.name === "Rare")) {
-                  awardPointsAndSendMessage(msg, msg.author.id, caughtPersonID, "Rare", 5, multiplier);
+                  awardPointsAndSendMessage(saveData, msg, msg.author.id, caughtPersonID, "Rare", 5, multiplier);
               } else if (person.roles.cache.some(role => role.name === "Uncommon")) {
-                  awardPointsAndSendMessage(msg, msg.author.id, caughtPersonID, "Uncommon", 3, multiplier);
+                  awardPointsAndSendMessage(saveData, msg, msg.author.id, caughtPersonID, "Uncommon", 3, multiplier);
               } else {
-                  awardPointsAndSendMessage(msg, msg.author.id, caughtPersonID, "Normal", 1, multiplier);
+                  awardPointsAndSendMessage(saveData, msg, msg.author.id, caughtPersonID, "Normal", 1, multiplier);
               }
-
-              const pokemonEntry = `${saveData["SEASON_EMOJI"]} ${caughtPersonUsername} ${saveData["SEASON_EMOJI"]}`;
-
-              console.log("pokemonEntry: " + pokemonEntry);
-
-              // Increment the Pokedex entry (first initialize if necessary)
-              saveData[msg.author.id]["pokedex"][pokemonEntry] = saveData[msg.author.id]["pokedex"][pokemonEntry] || 0
-              console.log(saveData[msg.author.id]["pokedex"][pokemonEntry]);
-              saveData[msg.author.id]["pokedex"][pokemonEntry] += 1;
-              console.log(saveData[msg.author.id]["pokedex"][pokemonEntry]);
-              console.log(saveData[msg.author.id]["pokedex"]);
-
-              // Reset the rarity value of the caught person
-              saveData[caughtPersonID]["rarityValue"] = 0;
-
-              // Set the cooldown after a successful catch
-              setCatchCooldown(msg.author.id, caughtPersonID);
-
-              save(saveData);
 
             }).catch(console.error);
         }
@@ -256,57 +244,111 @@ client.on('messageCreate', async msg => {
   }
 
   else if (cmd(msg, 'leaderboard')) {
-    
     saveData = load(saveData);
 
-      // Get the top 10 users by overall total points
-      const topUsersByPoints = Object.values(saveData)
-        .filter(user => user["wants-to-play"])
-        .sort((a, b) => b["points"] - a["points"])
-        .slice(0, 10);
-      // Send the overall total leaderboard
-      msg.channel.send("Overall TOTAL point leaderboard:\n" + 
-        topUsersByPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["points"]}`).join('\n')
-      );
+    // Filter and validate
+    const users = Object.values(saveData)
+    .filter(user => user && typeof user === 'object' && user["wants-to-play"]);
 
-      // Get the top 10 users by overall total barnaby points
-      const topUsersByBarnabyPoints = Object.values(saveData)
-        .filter(user => user["wants-to-play"])
-        .sort((a, b) => b["barnaby_points"] - a["barnaby_points"])
-        .slice(0, 10);
-      // Send the overall total leaderboard
-      msg.channel.send("Overall BARNABY point leaderboard:\n" + 
-        topUsersByBarnabyPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["barnaby_points"]}`).join('\n')
-      );
-
-      // I only send the overall total point/barnaby point leaderboard and not any weekly leaderboards because its more suspensful that way
+    if (users.length === 0) {
+      await msg.channel.send("No users found");
+      return;
     }
 
-  else if (cmd(msg, 'add-points')) {
-    const incrementPerson = msg.mentions.users.first();
-    const pointAmount = parseInt(msg.content.split(' ')[2]);
+    let messageContent = "";
 
-    const response = await adjustPoints(msg, incrementPerson, pointAmount, true);
+    // Get the top users for various categories
+    const topUsersByPoints = users.sort((a, b) => b["points"] - a["points"]).slice(0, 10);
+    const topUsersByBarnabyPoints = users.sort((a, b) => b["barnaby_points"] - a["barnaby_points"]).slice(0, 10);
+
+    // Append leaderboard messages
+    messageContent += "Here is the overall TOTAL point leaderboard!:\n" +
+    topUsersByPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["points"]}`).join('\n') + "\n\n";
+    
+    messageContent += "Here is the overall BARNABY point leaderboard!:\n" +
+      topUsersByBarnabyPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["barnaby_points"]}`).join('\n');
+    
+    sendLongMessage(msg.channel, messageContent);
+
+    // Only send the overall total point/barnaby point leaderboard and not any weekly leaderboards because its more suspensful that way
+  }
+
+  else if (cmd(msg, 'add-points')) {
+    const addOverallPointsPerson = msg.mentions.users.first();
+    const pointAmount = parseInt(msg.content.replace(/\s+/g, ' ').split(' ')[2]);
+
+    const response = await adjustPoints(saveData, msg, addOverallPointsPerson, pointAmount, "+", "");
     msg.channel.send(response);
   }
 
   else if (cmd(msg, 'subtract-points')) {
-    const decrementPerson = msg.mentions.users.first();
-    const pointAmount = parseInt(msg.content.split(' ')[2]);
+    const subtractOverallPointsPerson = msg.mentions.users.first();
+    const pointAmount = parseInt(msg.content.replace(/\s+/g, ' ').split(' ')[2]);
 
-    const response = await adjustPoints(msg, decrementPerson, pointAmount, false);
+    const response = await adjustPoints(saveData, msg, subtractOverallPointsPerson, pointAmount, "-", "");
+    msg.channel.send(response);
+  }
+
+  else if (cmd(msg, 'add-weekly-points')) {
+    const addPointsPerson = msg.mentions.users.first();
+    const pointAmount = parseInt(msg.content.replace(/\s+/g, ' ').split(' ')[2]);
+
+    const response = await adjustPoints(saveData, msg, addPointsPerson, pointAmount, "+", "weekly_");
+    msg.channel.send(response);
+  }
+
+  else if (cmd(msg, 'subtract-weekly-points')) {
+    const subtractWeeklyPointsPerson = msg.mentions.users.first();
+    const pointAmount = parseInt(msg.content.replace(/\s+/g, ' ').split(' ')[2]);
+
+    const response = await adjustPoints(saveData, msg, subtractWeeklyPointsPerson, pointAmount, "-", "weekly_");
+    msg.channel.send(response);
+  }
+
+  else if (cmd(msg, 'add-barnaby-points')) {
+    const addBarnabyPointsPerson = msg.mentions.users.first();
+    const pointAmount = parseInt(msg.content.replace(/\s+/g, ' ').split(' ')[2]);
+
+    const response = await adjustPoints(saveData, msg, addBarnabyPointsPerson, pointAmount, "+", "barnaby_");
+    msg.channel.send(response);
+  }
+
+  else if (cmd(msg, 'subtract-barnaby-points')) {
+    const subtractBarnabyPointsPerson = msg.mentions.users.first();
+    const pointAmount = parseInt(msg.content.replace(/\s+/g, ' ').split(' ')[2]);
+
+    const response = await adjustPoints(saveData, msg, subtractBarnabyPointsPerson, pointAmount, "-", "barnaby_");
+    msg.channel.send(response);
+  }
+
+  else if (cmd(msg, 'add-weekly-barnaby-points')) {
+    const addBarnabyPointsPerson = msg.mentions.users.first();
+    const pointAmount = parseInt(msg.content.replace(/\s+/g, ' ').split(' ')[2]);
+
+    const response = await adjustPoints(saveData, msg, addBarnabyPointsPerson, pointAmount, "+", "weekly_barnaby_");
+    msg.channel.send(response);
+  }
+
+  else if (cmd(msg, 'subtract-weekly-barnaby-points')) {
+    const subtractBarnabyWeeklyPointsPerson = msg.mentions.users.first();
+    const pointAmount = parseInt(msg.content.replace(/\s+/g, ' ').split(' ')[2]);
+
+    const response = await adjustPoints(saveData, msg, subtractBarnabyWeeklyPointsPerson, pointAmount, "-", "weekly_barnaby_");
     msg.channel.send(response);
   }
 
   else if (cmd(msg, 'get-rarity')) {
-    saveData = load(saveData);
-    msg.channel.send(`${setRarityPerson.username} has a rarity value of ${saveData[setRarityPerson.id]["rarity"]}`);
+    let getRarityPerson = msg.mentions.users.first();
+
+    if (!getRarityPerson) {
+      getRarityPerson = msg.author;
+    }
+    msg.channel.send(`${getRarityPerson.username} has a rarity value of ${saveData["" + getRarityPerson.id]["rarityValue"]}`);
   }
 
   else if (cmd(msg, 'set-rarity')) {
-    saveData = load(saveData);
     const setRarityPerson = msg.mentions.users.first();
-    const setRarityAmount = parseInt(msg.content.split(' ')[2]);
+    const setRarityAmount = parseInt(msg.content.replace(/\s+/g, ' ').split(' ')[2]);
     setRarity(msg, setRarityPerson, setRarityAmount);
   }
 

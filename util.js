@@ -23,7 +23,7 @@ const client = new Client({
 });
 
 var saveData;
-global.saveData = load(saveData);
+global.saveData = load();
 
 function cmd(msg, command_string){
     return msg.content.toLowerCase().includes(command_string);
@@ -41,10 +41,12 @@ async function askAI(prompt, author_id){
     return response.choices[0].message.content;
 }
 
-async function adjustPoints(msg, user, amount, isIncrement) {
+async function adjustPoints(saveData, msg, user, amount, pointSign, pointPrefix) {
     if (!(msg.member.roles.cache.some(role => role.name === 'PokemonBotManager') || msg.author.id === process.env.AUTHOR_ID)) {
         return "You are not a PokémonBotManager :eyes:";
     }
+
+    console.log(pointSign + " " + amount + " " + pointPrefix + "points");
 
     if (checkOffLimits(msg)) {
         return;
@@ -62,17 +64,14 @@ async function adjustPoints(msg, user, amount, isIncrement) {
         setupDefaultsIfNecessary(user);
     }
 
-    const currentPoints = saveData[user.id]["points"];
-    const currentWeeklyPoints = saveData[user.id]["weekly_points"];
-
-    if (isIncrement) {
-        saveData[user.id]["points"] = currentPoints + amount;
-        saveData[user.id]["weekly_points"] = currentWeeklyPoints + amount;
-        return `Added ${amount} points to ${user.username}'s TOTAL and WEEKLY points.`;
+    if (pointSign == "+") {
+        saveData[user.id][pointPrefix + "points"] = saveData[user.id][pointPrefix + "points"] + amount;
+        save(saveData);
+        return `Added ${amount} points to ${user.username}'s "${pointPrefix}points" for a total of ${saveData[user.id][pointPrefix + "points"]}.`;
     } else {
-        saveData[user.id]["points"] = currentPoints - amount;
-        saveData[user.id]["weekly_points"] = currentWeeklyPoints - amount;
-        return `Subtracted ${amount} points from ${user.username}'s TOTAL and WEEKLY points.`;
+        saveData[user.id][pointPrefix + "points"] = saveData[user.id][pointPrefix + "points"] - amount;
+        save(saveData);
+        return `Subtracted ${amount} points from ${user.username}'s "${pointPrefix}points" for a total of ${saveData[user.id][pointPrefix + "points"]}`;
     }
 }
 
@@ -91,18 +90,18 @@ function setRarity(msg, setRarityPerson, amount) {
 
     setupDefaultsIfNecessary(setRarityPerson);
 
-    if (saveData[setRarityPerson.id]["rarityValue"] === 0 && amount < 0) {
+    if (saveData["" + setRarityPerson.id]["rarityValue"] === 0 && amount < 0) {
         msg.channel.send(`${setRarityPerson.username}'s rarity value is already at the minimum value of 0.`);
     } else {
-        saveData[setRarityPerson.id]["rarityValue"] = amount;
+        saveData["" + setRarityPerson.id]["rarityValue"] = amount;
         msg.channel.send(`Set ${setRarityPerson.username}'s rarity value to ${amount}`);
         save(saveData);
     }
 }
 
 function increaseRarity(){
+    saveData = load();
     console.log("triggering-rarity-increase");
-    saveData = load(saveData);
   
     const roleActions = [
         { threshold: 30, add: "Shiny", remove: ["Rare"] },
@@ -170,22 +169,28 @@ function splitMessage(str, size) {
 
 // Function to send a long message in chunks
 function sendLongMessage(channel, message) {
-  const messageChunks = splitMessage(message, process.env.MAX_MESSAGE_LENGTH_BEFORE_SPLIT);
+  const messageChunks = splitMessage(message, Number(process.env.MAX_MESSAGE_LENGTH_BEFORE_SPLIT));
 
   messageChunks.forEach(chunk => {
       channel.send(chunk).catch(console.error);
   });
 }
 
-function setupDefaultsIfNecessary(user){
-  if (saveData[user.id] === undefined) {
-    saveData[user.id] = {"id": user.id, "points": 0, "weekly_points": 0,"barnaby_points": 0,"weekly_barnaby_points": 0,"username":user.username,"pokedex":{},"wants-to-play":true,"rarityValue":0,"AIPersonality":"Pokemon Announcer"};
-  }
-  save(saveData);
+function setupDefaultsIfNecessary(userID, userUsername){
+    try{
+        if (saveData[userID] === undefined) {
+            saveData[userID] = {"id": userID, "points": 0, "weekly_points": 0,"barnaby_points": 0,"weekly_barnaby_points": 0,"username":userUsername,"pokedex":{},"wants-to-play":true,"rarityValue":0,"AIPersonality":"Pokemon Announcer"};
+            save(saveData);
+            return true;
+        }
+    } catch(e) {
+        console.log("Error, player likely already registered");
+        return false;
+    }
 }
 
 function checkOffLimits(msg){
-    saveData = load(saveData);
+    saveData = load();
     let isOffLimits = false;
     for (let Person of msg.mentions.users) {
         let person = Person[1];
@@ -227,31 +232,39 @@ function save(saveData){
   fs.writeFileSync('./save-data.json', JSON.stringify(saveData));
 }
 
-function awardPointsAndSendMessage(msg, catcherID, caughtPersonID, rarity, basePoints, multiplier) {
+function awardPointsAndSendMessage(saveData, msg, catcherID, caughtPersonID, rarity, basePoints, multiplier) {
+
+  // If this is a PLOT ARMOR case
+  if (multiplier == null){
+    // STILL set the cooldown even after a failed catch
+    setCatchCooldown(saveData, msg.author.id, caughtPersonID);
+    return;
+  }
+
   let pointsAwarded = basePoints * multiplier;
 
-  catcherUsername = saveData[String(catcherID)]["username"];
+  catcherUsername = saveData["" + catcherID]["username"];
   caughtPersonUsername = saveData["" + caughtPersonID]["username"];
 
   // Check if caughtPerson is a Barnaby catch 
-  if (msg.mentions.users.size == 1 && caughtPersonID === process.env.BARNABY_ID) {
+  if (msg.mentions.users.size == 1 && ("" + caughtPersonID === process.env.BARNABY_ID)) {
     // Find the amount of unique attachments in the catch message
     const uniqueAttachments = new Set();
     msg.attachments.forEach(attachment => {
       uniqueAttachments.add(attachment.url);
     });
-    let attachment_limit = process.env.BARNABY_ATTACHMENT_LIMIT
+    let attachment_limit = Number(process.env.BARNABY_ATTACHMENT_LIMIT);
     if (uniqueAttachments.size > attachment_limit) {
-      // Limit the attachments to 10
+      // Limit the attachments
       msg.channel.send("Sorry! The limit for BARNABY attachments is " + attachment_limit + " so only " + attachment_limit + " of the provided attachments will count.") 
     }
     pointsAwarded = (basePoints + Math.min(uniqueAttachments.size, attachment_limit)) * multiplier;
     // Keep track of barnaby points for perk reasons. Actual points are also recorded further below
-    saveData[catcherID]["barnaby_points"] += pointsAwarded;
-    saveData[catcherID]["weekly_barnaby_points"] += pointsAwarded;
+    saveData["" + catcherID]["barnaby_points"] += pointsAwarded;
+    saveData["" + catcherID]["weekly_barnaby_points"] += pointsAwarded;
 
     // Send the catch AI message for Barnaby catch
-    askAI(`User @${catcherUsername} has caught ${uniqueAttachments.size} of a specially abundant type of Pokémon called "BARNABY" Pokémon and received ${pointsAwarded} points! Describe the catch, while playfully ridiculing the caught BARNABY personality, which is: ${saveData[caughtPersonID]["AIPersonality"]}`, catcherID)
+    askAI(`User @${catcherUsername} has caught ${uniqueAttachments.size} of a specially abundant type of Pokémon called "BARNABY" Pokémon and received ${pointsAwarded} points! Describe the catch, while playfully ridiculing the caught BARNABY personality, which is: ${saveData["" + caughtPersonID]["AIPersonality"]}`, catcherID)
       .then(response => sendLongMessage(msg.channel,response));
 
   } else {
@@ -262,33 +275,47 @@ function awardPointsAndSendMessage(msg, catcherID, caughtPersonID, rarity, baseP
   }
 
   // Add points to the catcher
-  saveData[catcherID]["points"] += pointsAwarded;
-  saveData[catcherID]["weekly_points"] += pointsAwarded;
+  saveData["" + catcherID]["points"] += pointsAwarded;
+  saveData["" + catcherID]["weekly_points"] += pointsAwarded;
 
   // Deduct half the base points from the caught person (minimum of 1)
   const deduction = Math.max(Math.floor(basePoints / 2), 1);
   // Only deduct TOTAL points
-  saveData[caughtPersonID]["points"] -= deduction;
+  saveData["" + caughtPersonID]["points"] -= deduction;
+
+  // Update the catcher's Pokedex
+
+  const pokemonEntry = `${saveData["SEASON_EMOJI"]} ${caughtPersonUsername} ${saveData["SEASON_EMOJI"]}`;
+
+  // Increment the Pokedex entry (first initialize if necessary)
+  saveData["" + msg.author.id]["pokedex"][pokemonEntry] = saveData[msg.author.id]["pokedex"][pokemonEntry] || 0
+  saveData["" + msg.author.id]["pokedex"][pokemonEntry] += 1;
+
+  // Reset the rarity value of the caught person
+  saveData["" + caughtPersonID]["rarityValue"] = 0;
+
+  // Set the cooldown after a successful catch
+  setCatchCooldown(saveData, msg.author.id, caughtPersonID);
 
   save(saveData);
 }
 
-function handleSpecialPerks(msg, catcherID, caughtPersonID) {
+function handleSpecialPerks(saveData, msg, catcherID, caughtPersonID) {
   let multiplier = 1;
   catcherUsername = saveData[String(catcherID)]["username"];
   caughtPersonUsername = saveData[String(caughtPersonID)]["username"];
 
   // Plot Armor Perk
   if (caughtPersonID === saveData["PLOT_ARMOR_PERSON_ID"]) {
-    askAI(`A user (@${catcherUsername}) has tried to 'catch' another user (@${caughtPersonUsername}), but was unsuccessful because of @${caughtPersonUsername}'s special PLOT ARMOR feature.`, catcherID)
-      .then(response => sendLongMessage(msg.channel,response));
     saveData["PLOT_ARMOR_PERSON_ID"] = "";
     msg.channel.send(`@${caughtPersonUsername} has used their PLOT ARMOR perk to avoid being caught!`);
+    // Have to save here because of return
+    save(saveData);
     return null; // Return null meaning the catch was unsuccessful
   }
 
   // Dynamax Perk
-  const dynamaxIndex = saveData["DYNAMAX_PEOPLE_ID"].indexOf(catcherID);
+  const dynamaxIndex = saveData["DYNAMAX_PEOPLE_ID"].indexOf("" + catcherID);
   if (dynamaxIndex !== -1) {
     multiplier *= 3;
     // Use up Dynamax Perk
@@ -298,7 +325,7 @@ function handleSpecialPerks(msg, catcherID, caughtPersonID) {
 
   // Vermin Whisperer Perk
   if (caughtPersonID === saveData["VERMIN_WHISPERER_PERSON_ID"]) {
-    let deductedPoints = process.env.VERMIN_STEAL_AMOUNT;
+    let deductedPoints = Number(process.env.VERMIN_STEAL_AMOUNT);
     msg.channel.send(`@${catcherUsername} has caught @${caughtPersonUsername}, who has the VERMIN WHISPERER perk, which steals ${deductedPoints} point(s) from @${catcherUsername}'s TOTAL points!`);
 
     saveData[caughtPersonID]["points"] += deductedPoints;
@@ -308,12 +335,13 @@ function handleSpecialPerks(msg, catcherID, caughtPersonID) {
   }
 
   // Swiper Perk
-  const swiperIndex = saveData["SWIPER_PEOPLE_ID"].indexOf(catcherID);
+  const swiperIndex = saveData["SWIPER_PEOPLE_ID"].indexOf("" + catcherID);
   if (swiperIndex !== -1) {
     // Use up the Swiper perk
+    steal_percentage = Number(process.env.SWIPER_STEAL_PERCENTAGE);
     saveData["SWIPER_PEOPLE_ID"][swiperIndex] = undefined;
-    let stolenPoints = Math.max(Math.floor(saveData[caughtPersonID]["points"] * (process.env.SWIPER_STEAL_PERCENTAGE / 100)), 1);
-    msg.channel.send(`@${catcherUsername} has used their SWIPER perk to steal ${stolenPoints} (${process.env.SWIPER_STEAL_PERCENTAGE}%) of @${caughtPersonUsername}'s TOTAL points!`);
+    let stolenPoints = Math.max(Math.floor(saveData[caughtPersonID]["points"] * (steal_percentage / 100)), 1);
+    msg.channel.send(`@${catcherUsername} has used their SWIPER perk to steal ${stolenPoints} (${steal_percentage}%) of @${caughtPersonUsername}'s TOTAL points!`);
 
     saveData[catcherID]["points"] += stolenPoints;
     saveData[catcherID]["weekly_points"] += stolenPoints;
@@ -322,9 +350,9 @@ function handleSpecialPerks(msg, catcherID, caughtPersonID) {
   }
 
   // Bounty Perk
-  if (saveData["BOUNTY_PERSON_ID"] === catcherID) {
+  if (saveData["BOUNTY_PERSON_ID"] === "" + catcherID) {
     multiplier *= 2;
-    msg.channel.send(`${catcher} has the BOUNTY perk, which has doubled their points from this catch!`);
+    msg.channel.send(`${catcherUsername} has the BOUNTY perk, which has doubled their points from this catch!`);
   } else if (saveData["BOUNTY_PERSON_ID"] === caughtPersonID) {
     multiplier *= 2;
     saveData["BOUNTY_PERSON_ID"] = "";
@@ -337,8 +365,7 @@ function handleSpecialPerks(msg, catcherID, caughtPersonID) {
 }
 
 // Function to check if a catch is allowed based on cooldowns
-function isCatchAllowed(catcherId, caughtId) {
-  saveData = load(saveData);
+function isCatchAllowed(saveData, catcherId, caughtId) {
   if (saveData["catchCooldowns"] === undefined){
     saveData["catchCooldowns"] = {};
   }
@@ -366,14 +393,12 @@ function isCatchAllowed(catcherId, caughtId) {
 }
 
 // Function to set a cooldown for a catch
-function setCatchCooldown(catcherId, caughtId) {
+function setCatchCooldown(saveData, catcherId, caughtId) {
   const cooldownDurationInMinutes = Number(process.env.COOLDOWN_MINUTES);
   const key = `${catcherId}-${caughtId}`;
   const reverseKey = `${caughtId}-${catcherId}`;
   const nowInMinutes = Math.ceil(Date.now() / (60 * 1000));
   const expiryTime = nowInMinutes + cooldownDurationInMinutes;
-
-  saveData = load(saveData);
 
   if (saveData["catchCooldowns"] === undefined){
     saveData["catchCooldowns"] = {};
@@ -385,7 +410,7 @@ function setCatchCooldown(catcherId, caughtId) {
 
 function dubPlotArmor(saveData, PLOT_ARMOR_PERSON){
   console.log(PLOT_ARMOR_PERSON);
-  saveData["PLOT_ARMOR_PERSON_ID"] = PLOT_ARMOR_PERSON.id;
+  saveData["PLOT_ARMOR_PERSON_ID"] = "" + PLOT_ARMOR_PERSON.id;
   console.log(saveData["PLOT_ARMOR_PERSON_ID"]);
   return saveData;
 }
@@ -396,35 +421,35 @@ function dubDynamax(saveData, DYNAMAX_PERSON) {
     if (!Array.isArray(saveData["DYNAMAX_PEOPLE_ID"])) {
       saveData["DYNAMAX_PEOPLE_ID"] = [];
     }
-    saveData["DYNAMAX_PEOPLE_ID"].push(DYNAMAX_PERSON.id);
+    saveData["DYNAMAX_PEOPLE_ID"].push("" + DYNAMAX_PERSON.id);
     console.log(saveData["DYNAMAX_PEOPLE_ID"]);
     return saveData;
-  }
-  
+}
 
 function dubVerminWhisperer(saveData, VERMIN_WHISPERER_PERSON){
-  saveData["VERMIN_WHISPERER_PERSON_ID"] = VERMIN_WHISPERER_PERSON.id;
+  saveData["VERMIN_WHISPERER_PERSON_ID"] = "" + VERMIN_WHISPERER_PERSON.id;
   console.log(saveData["VERMIN_WHISPERER_PERSON_ID"]);
   return saveData;
 }
 
 function dubSwiper(saveData, SWIPER_PERSON) {
-  // Ensure saveData["DYNAMAX_PEOPLE_ID"] is initialized as an array
-  if (!Array.isArray(saveData["DYNAMAX_PEOPLE_ID"])) {
-    saveData["DYNAMAX_PEOPLE_ID"] = [];
+  // Ensure saveData["SWIPER_PEOPLE_ID"] is initialized as an array
+  if (!Array.isArray(saveData["SWIPER_PEOPLE_ID"])) {
+    saveData["SWIPER_PEOPLE_ID"] = [];
   }
-  saveData["SWIPER_PEOPLE_ID"].push(SWIPER_PERSON.id);
+  saveData["SWIPER_PEOPLE_ID"].push("" + SWIPER_PERSON.id);
   console.log(saveData["SWIPER_PEOPLE_ID"]);
   return saveData;
 }
 
 function dubBounty(saveData, BOUNTY_PERSON){
-  saveData["BOUNTY_PERSON_ID"] = BOUNTY_PERSON.id;
+  saveData["BOUNTY_PERSON_ID"] = "" + BOUNTY_PERSON.id;
   console.log(saveData["BOUNTY_PERSON_ID"]);
   return saveData;
 }
 
 async function perkUpdate() {
+    saveData = load();
     try {
       const pokemon_channel = await client.channels.fetch(process.env.POKEMON_CHANNEL_ID);
   
@@ -433,9 +458,7 @@ async function perkUpdate() {
         return;
       }
   
-      saveData = load(saveData);
-  
-      // Filter and validate user objects
+      // Filter and validate
       const users = Object.values(saveData)
         .filter(user => user && typeof user === 'object' && user["wants-to-play"]);
   
@@ -449,13 +472,12 @@ async function perkUpdate() {
       const topUsersByBarnabyPoints = users.sort((a, b) => b["barnaby_points"] - a["barnaby_points"]).slice(0, 10);
       const topUsersByWeeklyPoints = users.sort((a, b) => b["weekly_points"] - a["weekly_points"]).slice(0, 5);
       const topUsersByWeeklyBarnabyPoints = users.sort((a, b) => b["weekly_barnaby_points"] - a["weekly_barnaby_points"]).slice(0, 5);
-      const topUsersByRarity = users.map(user => ({ ...user, rarity: user["rarity"] || 0 })).sort((a, b) => b["rarity"] - a["rarity"]).slice(0, 5);
+      const topUsersByRarity = users.map(user => ({ ...user, rarity: user["rarityValue"] || 0 })).sort((a, b) => b["rarityValue"] - a["rarityValue"]).slice(0, 5);
   
-      // Initialize a string to accumulate the message content
-      let messageContent = "";
+      let messageContent = "**------------LEADERBOARD UPDATE------------**\n\n";
   
       // Append leaderboard messages
-      messageContent += "Here is the overall TOTAL point leaderboard update!:\n" +
+      messageContent += "Here is the overall TOTAL point leaderboard!:\n" +
         topUsersByPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["points"]}`).join('\n') + "\n\n";
       
       messageContent += "Here is the overall BARNABY point leaderboard!:\n" +
@@ -468,21 +490,24 @@ async function perkUpdate() {
         topUsersByWeeklyBarnabyPoints.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["weekly_barnaby_points"]}`).join('\n') + "\n\n";
       
       messageContent += "Here is last week's RARITY leaderboard!:\n" +
-        topUsersByRarity.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["rarity"]}`).join('\n') + "\n\n";
+        topUsersByRarity.map((user, index) => `${index + 1}. **${user["username"]}**: ${user["rarityValue"]}`).join('\n') + "\n\n";
+      
+      messageContent += "**--------------PERKS AWARDED--------------**\n\n";
   
       // Plot Armor
       const topWeeklyUser = topUsersByWeeklyPoints[0];
       if (topWeeklyUser) {
         saveData = dubPlotArmor(saveData, topWeeklyUser);
-        messageContent += `Winner of the **PLOT ARMOR** perk: *${topWeeklyUser["username"]}*\n\n`;
+        messageContent += `Winner of the **PLOT ARMOR** perk:\n- *${topWeeklyUser["username"]}*\n\n`;
       }
   
+      saveData["DYNAMAX_PEOPLE_ID"] = [];
       // Dynamax
       messageContent += "Winners of the **DYNAMAX** perk:\n";
       topUsersByWeeklyPoints.slice(0, 3).forEach((user, index) => {
         console.log("USER: " + user)
         saveData = dubDynamax(saveData, user);
-        messageContent += `${index + 1}. ${user["username"]}\n`;
+        messageContent += `${index + 1}. *${user["username"]}*\n`;
       });
       messageContent += "\n";
   
@@ -490,26 +515,29 @@ async function perkUpdate() {
       const topWeeklyBarnabyUser = topUsersByWeeklyBarnabyPoints[0];
       if (topWeeklyBarnabyUser) {
         saveData = dubVerminWhisperer(saveData, topWeeklyBarnabyUser);
-        messageContent += `Winner of the **VERMIN WHISPERER** perk: *${topWeeklyBarnabyUser["username"]}*\n\n`;
+        messageContent += `Winner of the **VERMIN WHISPERER** perk:\n- *${topWeeklyBarnabyUser["username"]}*\n\n`;
       }
-
   
       // Swiper
+      saveData["SWIPER_PEOPLE_ID"] = [];
       messageContent += "Winners of the **SWIPER** perk:\n";
       topUsersByWeeklyBarnabyPoints.slice(0, 3).forEach((user, index) => {
         saveData = dubSwiper(saveData, user);
-        messageContent += `${index + 1}. ${user["username"]}\n`;
+        messageContent += `${index + 1}. *${user["username"]}*\n`;
       });
       messageContent += "\n";
   
       // Bounty
-      const topRarityValues = users.map(user => user["rarity"] || 0);
-      let topRarityValue = Math.max(topRarityValues);
-      const tiedUsers = users.filter(user => user["rarity"] === topRarityValue);
+      const topRarityValueUsers = users.map(user => user["rarityValue"] || 0);
+      console.log("topRarityValueUsers: " + topRarityValueUsers);
+      let topRarityValue = Math.max(...topRarityValueUsers);
+      console.log("topRarityValue: " + topRarityValue);
+      const tiedUsers = users.filter(user => user["rarityValue"] === topRarityValue);
+      console.log("tied Users: " + tiedUsers);
       if (tiedUsers.length > 0) {
         const bountyWinner = tiedUsers[Math.floor(Math.random() * tiedUsers.length)];
         saveData = dubBounty(saveData, bountyWinner);
-        messageContent += `Winner of the **BOUNTY** perk: *${bountyWinner["username"]}*\n\n`;
+        messageContent += `Winner of the **BOUNTY** perk:\n- *${bountyWinner["username"]}*\n\n`;
       }
   
       // Clear weekly points and cooldowns
@@ -519,10 +547,7 @@ async function perkUpdate() {
       });
       saveData["catchCooldowns"] = {};
   
-      // Save all updates
       save(saveData);
-  
-      // Send the accumulated message content as a single message
       sendLongMessage(pokemon_channel, messageContent);
   
       console.log("Weekly points have been cleared for all players.");
@@ -530,7 +555,7 @@ async function perkUpdate() {
     } catch (error) {
       console.error("An error occurred during the tournament update:", error);
     }
-  }
+}
   
   
   
@@ -558,6 +583,5 @@ module.exports = {
     awardPointsAndSendMessage,
     handleSpecialPerks,
     isCatchAllowed,
-    setCatchCooldown,
     perkUpdate
 };
