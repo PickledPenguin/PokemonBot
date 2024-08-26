@@ -9,7 +9,7 @@ const POSSIBLE_PERKS = {
 // TESTING reasons, locks to only pokemon-dev channel and additional dev server
 //const ALLOWED_CHANNELS=["1065064038427541594", "1053540259717189714"]
 
-const ALLOWED_CHANNELS=["1065049126871515176", "1065064038427541594", "1053540259717189714"]
+const ALLOWED_CHANNELS=["1065064038427541594", "1065049126871515176", "1053540259717189714"];
 
 const { stat } = require('fs');
 // imports all the util functions we need
@@ -63,7 +63,7 @@ cron.schedule('0 12 * * 0', perkUpdate, { timezone: "America/New_York" });
 client.on('messageCreate', async msg => {
 
   // ignore self messages and other bot messages. Restrict messages to only the allowed channels
-  if (msg.author === client.user || msg.author.bot || !ALLOWED_CHANNELS.includes(msg.channel.id)) {
+  if (msg.author === client.user || msg.author.bot || !ALLOWED_CHANNELS.includes("" + msg.channel.id)) {
     return;
   }
 
