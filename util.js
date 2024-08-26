@@ -172,7 +172,7 @@ function splitMessage(str, size) {
 
 // Function to send a long message in chunks
 function sendLongMessage(channel, message) {
-  const messageChunks = splitMessage(message, process.env.MAX_MESSAGE_LENGTH_BEFORE_SPLIT);
+  const messageChunks = splitMessage(message, Number(process.env.MAX_MESSAGE_LENGTH_BEFORE_SPLIT));
 
   messageChunks.forEach(chunk => {
       channel.send(chunk).catch(console.error);
