@@ -111,7 +111,7 @@ client.on('messageCreate', async msg => {
   }
 
   else if (cmd(msg, 'register')){
-    if(setupDefaultsIfNecessary(msg.author.id, msg.author.username)){
+    if(setupDefaultsIfNecessary(saveData, msg.author.id, msg.author.username)){
       msg.channel.send("Successfully registered :thumbsup:");
     } else {
       msg.channel.send("You are already registered :thumbsup:");
@@ -177,14 +177,14 @@ client.on('messageCreate', async msg => {
   }
 
   else if (cmd(msg, 'opt-out')){
-    setupDefaultsIfNecessary(msg.author);
+    setupDefaultsIfNecessary(saveData, msg.author.id, msg.author.username);
     saveData[msg.author.id]["wants-to-play"] = false;
     msg.channel.send("Successfully opted out for playing the game. Any catch messages that mention you will be deleted")
     save(saveData);
   }
 
   else if (cmd(msg, 'opt-in')){
-    setupDefaultsIfNecessary(msg.author);
+    setupDefaultsIfNecessary(saveData, msg.author.id, msg.author.username);
     saveData[msg.author.id]["wants-to-play"] = true;
     msg.channel.send("Successfully opted in to playing the game. Happy hunting :grin:");
     save(saveData);

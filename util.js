@@ -56,7 +56,7 @@ async function adjustPoints(saveData, msg, user, amount, pointSign, pointPrefix)
     }
 
     if (saveData[user.id] === undefined) {
-        setupDefaultsIfNecessary(user);
+        setupDefaultsIfNecessary(saveData, user.id, user.username);
     }
 
     if (pointSign == "+") {
@@ -83,7 +83,8 @@ function setRarity(msg, setRarityPerson, amount) {
         return msg.channel.send("No user mentioned, please specify a person.");
     }
 
-    setupDefaultsIfNecessary(setRarityPerson);
+    // unnecessary but I'm keeping it here in case
+    setupDefaultsIfNecessary(saveData, setRarityPerson.id, setRarityPerson.username);
 
     if (saveData["" + setRarityPerson.id]["rarityValue"] === 0 && amount < 0) {
         msg.channel.send(`${setRarityPerson.username}'s rarity value is already at the minimum value of 0.`);
@@ -179,7 +180,11 @@ function sendLongMessage(channel, message) {
   });
 }
 
-function setupDefaultsIfNecessary(userID, userUsername){
+function setupDefaultsIfNecessary(saveData, userID, userUsername){
+    console.log(userID);
+    console.log(saveData[userID]);
+    console.log(saveData[userID] === undefined);
+
     try{
         if (saveData[userID] === undefined) {
             saveData[userID] = {"id": userID, "points": 0, "weekly_points": 0,"barnaby_points": 0,"weekly_barnaby_points": 0,"username":userUsername,"pokedex":{},"wants-to-play":true,"rarityValue":0,"AIPersonality":"Pokemon Announcer"};
