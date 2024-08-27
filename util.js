@@ -297,6 +297,9 @@ function awardPointsAndSendMessage(saveData, msg, catcherID, caughtPersonID, rar
 
 function handleSpecialPerks(saveData, msg, catcherID, caughtPersonID) {
   let multiplier = 1;
+
+  setupDefaultsIfNecessary(saveData, msg.author.id, msg.author.username);
+
   catcherUsername = saveData["" + catcherID]["username"];
   caughtPersonUsername = saveData["" + caughtPersonID]["username"];
 

@@ -219,7 +219,7 @@ msg.channel.send(result);
               return;
           }
 
-        if (msg.author.id === caughtPersonID) {
+        if ("" + msg.author.id === caughtPersonID) {
             askAI("A user has tried to 'catch' themselves. Ridicule them for attempting such a ridiculous thing.", msg.author.id)
                 .then(response => sendLongMessage(msg.channel,response));
         } else {
