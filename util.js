@@ -297,8 +297,8 @@ function awardPointsAndSendMessage(saveData, msg, catcherID, caughtPersonID, rar
 
 function handleSpecialPerks(saveData, msg, catcherID, caughtPersonID) {
   let multiplier = 1;
-  catcherUsername = saveData[String(catcherID)]["username"];
-  caughtPersonUsername = saveData[String(caughtPersonID)]["username"];
+  catcherUsername = saveData["" + catcherID]["username"];
+  caughtPersonUsername = saveData["" + caughtPersonID]["username"];
 
   // Plot Armor Perk
   if (caughtPersonID === saveData["PLOT_ARMOR_PERSON_ID"]) {
