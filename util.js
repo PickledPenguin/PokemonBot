@@ -253,7 +253,8 @@ function awardPointsAndSendMessage(saveData, msg, catcherID, caughtPersonID, rar
       // Limit the attachments
       msg.channel.send("Sorry! The limit for BARNABY attachments is " + attachment_limit + " so only " + attachment_limit + " of the provided attachments will count.") 
     }
-    pointsAwarded = (basePoints + Math.min(uniqueAttachments.size, attachment_limit)) * multiplier;
+    // award points, making sure at least one point is added and 1 attachment = 1 point * multiplier
+    pointsAwarded = ((basePoints - 1) + Math.max(1, Math.min(uniqueAttachments.size, attachment_limit))) * multiplier;
     // Keep track of barnaby points for perk reasons. Actual points are also recorded further below
     saveData["" + catcherID]["barnaby_points"] += pointsAwarded;
     saveData["" + catcherID]["weekly_barnaby_points"] += pointsAwarded;
